@@ -150,9 +150,9 @@ game_update :: proc() {
 @(export)
 game_init_window :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
-	rl.InitWindow(1280, 720, "Tetris with John")
+	rl.InitWindow(1280, 720, "Cabin Jam 2026")
 	rl.SetWindowPosition(200, 200)
-	rl.SetTargetFPS(500)
+	rl.SetTargetFPS(60)
 	rl.SetExitKey(nil)
 }
 
