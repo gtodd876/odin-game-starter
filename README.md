@@ -1,121 +1,126 @@
-# Odin + Raylib + Hot Reload template
+# Cabin Jam 2026
 
-This is an [Odin](https://github.com/odin-lang/Odin) + [Raylib](https://github.com/raysan5/raylib) game template with [Hot Reloading](http://zylinski.se/posts/hot-reload-gameplay-code/) pre-setup. It makes it possible to reload gameplay code while the game is running.
+Odin + Raylib starter with hot reload, save-triggered rebuilds, and an in-game debug overlay. Ships as native desktop (macOS, Windows) and web (itch.io) at 1280×720.
 
-Supported platforms: Windows, macOS, Linux and [web](#web-build).
+Built on top of [karl-zylinski/odin-raylib-hot-reload-game-template](https://github.com/karl-zylinski/odin-raylib-hot-reload-game-template) (MIT). See `LICENSE`.
 
-Supported editors: [Sublime Text](#sublime-text), [Zed](https://zed.dev) on macOS, and [RAD Debugger](#rad-debugger) for Windows native debugging.
+## Requirements
 
-![hot_reload gif](https://github.com/user-attachments/assets/18059ab2-0878-4617-971d-e629a969fc93)
+- [Odin](https://odin-lang.org) compiler on `PATH`.
+- **macOS:** [fswatch](https://github.com/emcrisostomo/fswatch) for `watch.sh` — `brew install fswatch`.
+- **Windows:** nothing extra — `watch.bat` uses built-in PowerShell.
+- **Web build:** [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html).
 
-See The Legend of Tuna repository for an example project that also uses Box2D: https://github.com/karl-zylinski/the-legend-of-tuna
+## Quick start
 
-I used this kind of hot reloading while developing my game [CAT & ONION](https://store.steampowered.com/app/2781210/CAT__ONION/).
+### macOS
 
-## Hot reload quick start
-
-> [!NOTE]
-> These instructions use some Windows terminology. If you are on mac / linux, then replace these words:
-> - `bat` -> `sh`
-> - `exe` -> `bin`
-> - `dll` -> `dylib` (mac), `so` (linux)
-
-1. Run `build_hot_reload.bat` to create `game_hot_reload.exe` (located at the root of the project) and `game.dll` (located in `build/hot_reload`). Note: It expects odin compiler to be part of your PATH environment variable.
-2. Run `game_hot_reload.exe`, leave it running.
-3. Make changes to the gameplay code in `source/game.odin`. For example, change the line `rl.ClearBackground(rl.BLACK)` so that it instead uses `rl.BLUE`. Save the file.
-4. Run `build_hot_reload.bat`, it will recompile `game.dll`.
-5. The running `game_hot_reload.exe` will see that `game.dll` changed and reload it. But it will use the same `Game_Memory` (a struct defined in `source/game.odin`) as before. This will make the game use your new code without having to restart.
-
-Note, in step 4: `build_hot_reload.bat` does not rebuild `game_hot_reload.exe`. It checks if `game_hot_reload.exe` is already running. If it is, then it skips compiling it.
-
-## Release builds
-
-Run `build_release.bat` to create a release build in `build/release`. That exe does not have the hot reloading stuff, since you probably do not want that in the released version of your game. This means that the release version does not use `game.dll`, instead it imports the `source` folder as a normal Odin package.
-
-`build_debug.bat` is like `build_release.bat` but makes a debuggable executable, in case you need to debug your non-hot-reload-exe.
-
-## Web build
-
-`build_web.bat` builds a release web executable (no hot reloading!).
-
-### Web build requirements
-
-- Emscripten. Download and install somewhere on your computer. Follow the instructions here: https://emscripten.org/docs/getting_started/downloads.html (follow the stuff under "Installation instructions using the emsdk (recommended)").
-- Recent Odin compiler: This uses Raylib binding changes that were done on January 1, 2025.
-
-The wasm-compiled Raylib + RayGUI libraries (`vendor/raylib/wasm/libraylib.a` and `libraygui.a`) are committed to this repo because Homebrew's Odin package ships an empty `vendor/raylib/wasm/` directory. If you update the Odin compiler and the ABI changes, re-fetch them from Odin upstream:
+```bash
+./build_hot_reload.sh run   # build and launch
+./watch.sh                  # in a second terminal: rebuild on save
 ```
+
+### Windows
+
+```bat
+build_hot_reload.bat run
+watch.bat
+```
+
+### Web
+
+1. Install emsdk. The scripts look in `$HOME/repos/emsdk` (macOS) and `c:\SDK\emsdk` (Windows) by default. If yours lives elsewhere, either edit `EMSCRIPTEN_SDK_DIR` at the top of `build_web.sh` / `.bat`, or just put `emcc` on your `PATH`.
+2. `./build_web.sh` or `build_web.bat`.
+3. `cd build/web && python3 -m http.server` and open http://localhost:8000.
+
+You can't open `build/web/index.html` directly — browser CORS rules block wasm loading from `file://`.
+
+## In-game controls
+
+| Key | Action |
+|-----|--------|
+| WASD / arrows | move |
+| F3 | toggle debug overlay |
+| F4 | pause simulation (overlay stays live) |
+| F5 | force hot reload |
+| F6 | force full restart (re-runs `game_init`) |
+| Esc | quit |
+
+## How hot reload works
+
+`game_hot_reload.bin` / `.exe` is a host that stays running. `source/game.odin` compiles to a shared library (`game.dylib` / `.dll`) in `build/hot_reload/`, and the host reloads it whenever the file changes on disk. `Game_Memory` is preserved across reloads — tweak proc bodies, constants, or add new procs without losing game state.
+
+If you change the **size** of `Game_Memory`, the host detects it and calls `game_init` from scratch. One-time state-reset per struct change.
+
+`watch.sh` / `watch.bat` re-runs the build script on every `.odin` save so the full loop is: save in your editor → game updates in ~1 second.
+
+## Project layout
+
+```
+source/
+  game.odin                    reloadable game logic
+  main_hot_reload/             dev host
+  main_release/                desktop release entry
+  main_web/                    emscripten entry + JS glue
+assets/                        sprites, sounds, music (empty; add yours here)
+vendor/raylib/wasm/            prebuilt wasm libs for web build
+build_hot_reload.{sh,bat}      dev build
+build_release.{sh,bat}         optimized desktop build
+build_web.{sh,bat}             wasm build
+watch.{sh,bat}                 save-triggered rebuild
+ols.json                       OLS config (portable, shared)
+project.sublime-project        Sublime Text build system
+.zed/launch.json               Zed debug config (gitignored, per-machine)
+```
+
+## Editor setup
+
+### Zed (macOS)
+Install the `ols` language server. `ols.json` is auto-picked-up; `ols` discovers its `core` / `vendor` collections by running `odin root`. Debug via `.zed/launch.json` (LLDB targeting the hot-reload binary).
+
+### Sublime Text
+Install `LSP` + `LSP-odin` via Package Control. Open `project.sublime-project`. `Ctrl/Cmd+B` triggers `build_hot_reload`. Compile errors are click-navigable.
+
+### RAD Debugger (Windows)
+Attach to `game_hot_reload.exe` for native debugging with hot reload. The build script outputs a fresh PDB per reload, so the debugger stays in sync across swaps.
+
+## Debug overlay
+
+`draw_debug_overlay` in `source/game.odin` uses raygui (already part of `vendor:raylib`). Values live inside `Debug_State` which is nested in `Game_Memory`, so tunings survive hot reload. Add more controls by extending the struct:
+
+```odin
+rl.GuiCheckBox({16, 180, 16, 16}, "god mode", &g.debug.god_mode)
+rl.GuiSlider({70, 200, 120, 16}, "spawn rate",
+    fmt.ctprintf("%.1fs", g.debug.spawn_rate),
+    &g.debug.spawn_rate, 0.1, 5)
+```
+
+See `raygui.odin` in Odin's `vendor:raylib` for the full control list.
+
+## Resolution
+
+1280×720 on both desktop and web.
+
+- Desktop: `rl.InitWindow(1280, 720, ...)` in `game_init_window`.
+- Web: canvas is locked at 1280×720 in `source/main_web/index_template.html` with `image-rendering: pixelated` and CSS `max-width/height: 100vw/vh` for letterboxed scaling inside itch's iframe.
+
+`PIXEL_WINDOW_HEIGHT :: 180` sets the camera zoom — the game renders as if the viewport were 180 units tall (a 4× upscale at 720p). Tweak this to change the pixel-art feel.
+
+## Shipping
+
+- **Desktop build:** `./build_release.sh` / `build_release.bat` → `build/release/` (optimized, no hot-reload host, assets folder copied alongside the binary).
+- **Web build:** `./build_web.sh` / `build_web.bat` → `build/web/`. Zip the contents and upload as an HTML5 build on itch.io.
+
+## Wasm libraries
+
+`vendor/raylib/wasm/libraylib.a` and `libraygui.a` are committed to this repo because Homebrew's Odin package ships an empty `vendor/raylib/wasm/` directory, and other Odin distributions are inconsistent. If the Odin toolchain updates and the raylib ABI shifts, re-fetch from upstream:
+
+```bash
 curl -L https://raw.githubusercontent.com/odin-lang/Odin/master/vendor/raylib/wasm/libraylib.a -o vendor/raylib/wasm/libraylib.a
 curl -L https://raw.githubusercontent.com/odin-lang/Odin/master/vendor/raylib/wasm/libraygui.a -o vendor/raylib/wasm/libraygui.a
 ```
 
-### Web build quick start
+## Credit
 
-1. Point `EMSCRIPTEN_SDK_DIR` in `build_web.bat/sh` to where you installed emscripten.
-2. Run `build_web.bat/sh`.
-3. Web game is in the `build/web` folder.
-
-> [!NOTE]
-> `build_web.bat` is for windows, `build_web.sh` is for Linux / macOS.
-
-> [!WARNING]
-> You can't run `build/web/index.html` directly due to "CORS policy" javascript errors. You can work around that by running a small python web server:
-> - Go to `build/web` in a console.
-> - Run `python -m http.server`
-> - Go to `localhost:8000` in your browser.
->
-> _For those who don't have python: Emscripten comes with it. See the `python` folder in your emscripten installation directory._
-
-Build a desktop executable using `build_desktop.bat/sh`. It will end up in the `build/desktop` folder.
-
-### Web build troubleshooting
-
-See the README of the [Odin + Raylib on the web repository](https://github.com/karl-zylinski/odin-raylib-web?tab=readme-ov-file#troubleshooting) for troubleshooting steps.
-
-## Assets
-You can put assets such as textures, sounds and music in the `assets` folder. That folder will be copied when a release build is created and also integrated into the web build.
-
-The hot reload build doesn't do any copying, because the hot reload executable lives in the root of the repository, alongside the `assets` folder.
-
-## Auto-rebuild on save
-
-A file-watcher script re-runs `build_hot_reload` whenever any `.odin` file under `source/` changes. Leave the game running in one terminal, and the watcher in another:
-
-- **macOS / Linux:** `./watch.sh` (requires `fswatch` — install with `brew install fswatch`)
-- **Windows:** `watch.bat` (uses PowerShell's built-in `FileSystemWatcher`, no install)
-
-Saves the manual "go re-run the build script" step on every iteration.
-
-## In-game debug overlay
-
-`source/game.odin` includes a small raygui-based debug overlay with an FPS readout, player state, a speed slider, and a reset button. It lives inside `Game_Memory` so its settings survive hot reload.
-
-- `F3` — toggle the overlay
-- `F4` — pause the simulation (overlay stays interactive)
-
-Add more knobs by extending `Debug_State` and `draw_debug_overlay`. Raygui is already part of `vendor:raylib`, so no new dependencies are needed.
-
-## Sublime Text
-
-For those who use Sublime Text there's a project file: `project.sublime-project`.
-
-How to use:
-- Open the project file in sublime
-- Choose the build system `Main Menu -> Tools -> Build System -> Odin + Raylib + Hot Reload template` (you can rename the build system by editing `project.sublime-project` manually)
-- Compile and run by pressing using F7 / Ctrl + B / Cmd + B
-- After you make code changes and want to hot reload, just hit F7 / Ctrl + B / Cmd + B again
-
-### Sublime LSP (autocomplete, hover, jump-to-def)
-
-Install the `LSP` and `LSP-odin` packages via Package Control, make sure the `odin` compiler is on your `PATH`, and the committed `ols.json` will be picked up automatically. OLS discovers its `core`/`vendor` collections by invoking `odin root`, so the same file works on macOS, Linux, and Windows.
-
-## RAD Debugger
-You can hot reload while attached to [RAD Debugger](https://github.com/EpicGamesExt/raddebugger). Attach to your `game_hot_reload` executable, make code changes in your code editor and re-run the the `build_hot_reload` script to build and hot reload.
-
-## Questions?
-
-Ask questions in my gamedev Discord: https://discord.gg/4FsHgtBmFK
-
-I have a blog post about Hot Reloading here: http://zylinski.se/posts/hot-reload-gameplay-code/
-
-## Have a nice day! /Karl Zylinski
+Template foundation: [karl-zylinski/odin-raylib-hot-reload-game-template](https://github.com/karl-zylinski/odin-raylib-hot-reload-game-template).
+Hot-reload design walkthrough: http://zylinski.se/posts/hot-reload-gameplay-code/
