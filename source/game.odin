@@ -49,7 +49,7 @@ Game_State :: struct {
 
 
 Game_Memory :: struct {
-	//render_texture : rl.RenderTexture2D,
+	render_texture : rl.RenderTexture2D,
 	old_input_state : All_Input_State,
 	input_state : All_Input_State,
 	irs : Input_Recording_State,
@@ -61,11 +61,14 @@ Game_Memory :: struct {
 g: ^Game_Memory
 
 game_camera :: proc() -> rl.Camera2D {
-	w := f32(rl.GetScreenWidth())
-	h := f32(rl.GetScreenHeight())
+	// w := f32(rl.GetScreenWidth())
+	// h := f32(rl.GetScreenHeight())
+
+	w := f32(g.render_texture.texture.width)
+	h := f32(g.render_texture.texture.height)
 
 	return {
-		zoom = h/PIXEL_WINDOW_HEIGHT,
+		zoom = 1.0,
 		// Fixed camera anchored at world origin so the player visibly moves on
 		// screen. Change `target` to `g.gs.player_pos` for a follow-cam.
 		target = {0, 0},
@@ -129,7 +132,7 @@ draw_debug_overlay :: proc() {
 }
 
 draw :: proc() {
-	rl.BeginDrawing()
+	rl.BeginTextureMode(g.render_texture)
 	rl.ClearBackground(rl.BLUE)
 
 	rl.BeginMode2D(game_camera())
@@ -146,9 +149,36 @@ draw :: proc() {
 	// on top of everything. `fmt.ctprintf` uses the temp allocator, which is
 	// freed at end-of-frame by the host in main_hot_reload.odin /
 	// main_release.odin / main_web_entry.odin.
-	draw_debug_overlay()
 
-	rl.EndDrawing()
+	rl.EndTextureMode()
+	
+
+	{ // DRAW TO WINDOW
+		rl.BeginDrawing()
+		defer rl.EndDrawing()
+
+		rl.ClearBackground(rl.BLACK)
+
+
+
+		screen_width := f32(rl.GetScreenWidth())
+		screen_height := f32(rl.GetScreenHeight())
+
+		scale := min(screen_width/f32(g.render_texture.texture.width), screen_height/f32(g.render_texture.texture.height))
+
+		src := rl.Rectangle{ 0, 0, f32(g.render_texture.texture.width), f32(-g.render_texture.texture.height) }
+		
+		window_midpoint_x    := screen_width -  (f32(g.render_texture.texture.width)   * scale) / 2
+		window_midpoint_y    := screen_height - (f32(g.render_texture.texture.height)  * scale) / 2
+		window_scaled_width  := f32(g.render_texture.texture.width)  * scale
+		window_scaled_height := f32(g.render_texture.texture.height) * scale
+
+		dst := rl.Rectangle{(screen_width - window_scaled_width)/2, (screen_height - window_scaled_height)/2, window_scaled_width, window_scaled_height}
+		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
+		
+		draw_debug_overlay()
+		
+	}
 }
 
 @(export)
@@ -201,6 +231,8 @@ game_init :: proc() {
 		run = true,
 		debug = { show_overlay = true, player_speed = 100 },
 	}
+
+	g.render_texture = rl.LoadRenderTexture(1280, 720)	
 
 	game_hot_reloaded(g)
 }
