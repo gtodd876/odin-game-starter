@@ -40,8 +40,20 @@ Debug_State :: struct {
 	debug_draw:   bool,
 }
 
-Game_Memory :: struct {
+
+// Doesn't contain any "meta" state like
+// inputs and debug state
+Game_State :: struct {
 	player_pos: rl.Vector2,
+}
+
+
+Game_Memory :: struct {
+	//render_texture : rl.RenderTexture2D,
+	old_input_state : All_Input_State,
+	input_state : All_Input_State,
+	irs : Input_Recording_State,
+	gs : Game_State,
 	run: bool,
 	debug: Debug_State,
 }
@@ -55,13 +67,14 @@ game_camera :: proc() -> rl.Camera2D {
 	return {
 		zoom = h/PIXEL_WINDOW_HEIGHT,
 		// Fixed camera anchored at world origin so the player visibly moves on
-		// screen. Change `target` to `g.player_pos` for a follow-cam.
+		// screen. Change `target` to `g.gs.player_pos` for a follow-cam.
 		target = {0, 0},
 		offset = { w/2, h/2 },
 	}
 }
 
 update :: proc() {
+
 	if rl.IsKeyPressed(.F3) do g.debug.show_overlay = !g.debug.show_overlay
 	if rl.IsKeyPressed(.F4) do g.debug.paused = !g.debug.paused
 
@@ -73,21 +86,21 @@ update :: proc() {
 
 	input: rl.Vector2
 
-	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) {
+	if IsKeyDown(.UP) || IsKeyDown(.W) {
 		input.y -= 1
 	}
-	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) {
+	if IsKeyDown(.DOWN) || IsKeyDown(.S) {
 		input.y += 1
 	}
-	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) {
+	if IsKeyDown(.LEFT) || IsKeyDown(.A) {
 		input.x -= 1
 	}
-	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) {
+	if IsKeyDown(.RIGHT) || IsKeyDown(.D) {
 		input.x += 1
 	}
 
 	input = linalg.normalize0(input)
-	g.player_pos += input * rl.GetFrameTime() * g.debug.player_speed
+	g.gs.player_pos += input * rl.GetFrameTime() * g.debug.player_speed
 }
 
 draw_debug_overlay :: proc() {
@@ -96,7 +109,7 @@ draw_debug_overlay :: proc() {
 	rl.GuiPanel({8, 8, 240, 200}, "debug  [F3 hide  F4 pause]")
 
 	rl.DrawText(fmt.ctprintf("%d fps", rl.GetFPS()),                        16, 40, 10, rl.BLACK)
-	rl.DrawText(fmt.ctprintf("pos %.1f, %.1f", g.player_pos.x, g.player_pos.y), 16, 56, 10, rl.BLACK)
+	rl.DrawText(fmt.ctprintf("pos %.1f, %.1f", g.gs.player_pos.x, g.gs.player_pos.y), 16, 56, 10, rl.BLACK)
 	if g.debug.paused {
 		rl.DrawText("PAUSED", 200, 40, 10, rl.MAROON)
 	}
@@ -110,7 +123,7 @@ draw_debug_overlay :: proc() {
 	)
 
 	if rl.GuiButton({16, 124, 100, 20}, "reset pos") {
-		g.player_pos = {}
+		g.gs.player_pos = {}
 	}
 	rl.GuiCheckBox({16, 156, 16, 16}, "draw debug", &g.debug.debug_draw)
 }
@@ -120,10 +133,10 @@ draw :: proc() {
 	rl.ClearBackground(rl.BLUE)
 
 	rl.BeginMode2D(game_camera())
-	rl.DrawRectangleV(g.player_pos, {16, 16}, rl.RAYWHITE)
+	rl.DrawRectangleV(g.gs.player_pos, {16, 16}, rl.RAYWHITE)
 
 	if g.debug.debug_draw {
-		rl.DrawRectangleLinesEx({g.player_pos.x, g.player_pos.y, 16, 16}, 1, rl.MAGENTA)
+		rl.DrawRectangleLinesEx({g.gs.player_pos.x, g.gs.player_pos.y, 16, 16}, 1, rl.MAGENTA)
 		rl.DrawLineV({-5, 0}, {5, 0}, rl.YELLOW)
 		rl.DrawLineV({0, -5}, {0, 5}, rl.YELLOW)
 	}
@@ -140,6 +153,30 @@ draw :: proc() {
 
 @(export)
 game_update :: proc() {
+	// RECORD THEN IMMEDIATELY PLAYBACK
+	if rl.IsKeyPressed(.L) {
+		if g.irs.is_playback {
+			end_input_playback(&g.irs)
+			g.old_input_state = {}
+		} else if g.irs.is_recording {
+			end_recording_input(&g.irs)
+			begin_input_playback(&g.irs, &g.gs)
+			g.irs.playback_frame = 0
+		} else if !g.irs.is_recording && !g.irs.is_playback {
+			begin_recording_input(&g.irs, &g.gs)			
+		}
+	}
+
+	update_all_input_state()
+
+	if g.irs.is_playback {
+		playback_input(&g.irs, &g.gs, &g.input_state)
+	} else if g.irs.is_recording {
+		record_input(&g.irs, &g.input_state)
+	}
+
+	g.old_input_state = g.input_state
+	
 	update()
 	draw()
 

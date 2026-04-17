@@ -4,6 +4,9 @@
 		{
 			"path": ".",
 		},
+		{
+			"path": "C:\\odin-windows-amd64-dev-2026-04\\core",
+		},
 	],
 	"build_systems":
 	[
