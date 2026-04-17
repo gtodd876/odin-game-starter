@@ -4,4 +4,14 @@ game_hot_reload.exe
 game_hot_reload.bin
 game_hot_reload.bin.DSYM
 raylib.dll
-linux/**
+.zed
+
+# Debug artifacts
+debug_build
+*.dSYM/
+*.pdb
+
+# OS / editor cruft
+.DS_Store
+*.log
+log.txt

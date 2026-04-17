@@ -4,7 +4,7 @@ This is an [Odin](https://github.com/odin-lang/Odin) + [Raylib](https://github.c
 
 Supported platforms: Windows, macOS, Linux and [web](#web-build).
 
-Supported editors and debuggers: [Sublime Text](#sublime-text), [VS Code](#vs-code) and [RAD Debugger](#rad-debugger).
+Supported editors: [Sublime Text](#sublime-text), [Zed](https://zed.dev) on macOS, and [RAD Debugger](#rad-debugger) for Windows native debugging.
 
 ![hot_reload gif](https://github.com/user-attachments/assets/18059ab2-0878-4617-971d-e629a969fc93)
 
@@ -43,6 +43,12 @@ Run `build_release.bat` to create a release build in `build/release`. That exe d
 - Emscripten. Download and install somewhere on your computer. Follow the instructions here: https://emscripten.org/docs/getting_started/downloads.html (follow the stuff under "Installation instructions using the emsdk (recommended)").
 - Recent Odin compiler: This uses Raylib binding changes that were done on January 1, 2025.
 
+The wasm-compiled Raylib + RayGUI libraries (`vendor/raylib/wasm/libraylib.a` and `libraygui.a`) are committed to this repo because Homebrew's Odin package ships an empty `vendor/raylib/wasm/` directory. If you update the Odin compiler and the ABI changes, re-fetch them from Odin upstream:
+```
+curl -L https://raw.githubusercontent.com/odin-lang/Odin/master/vendor/raylib/wasm/libraylib.a -o vendor/raylib/wasm/libraylib.a
+curl -L https://raw.githubusercontent.com/odin-lang/Odin/master/vendor/raylib/wasm/libraygui.a -o vendor/raylib/wasm/libraygui.a
+```
+
 ### Web build quick start
 
 1. Point `EMSCRIPTEN_SDK_DIR` in `build_web.bat/sh` to where you installed emscripten.
@@ -62,8 +68,6 @@ Run `build_release.bat` to create a release build in `build/release`. That exe d
 
 Build a desktop executable using `build_desktop.bat/sh`. It will end up in the `build/desktop` folder.
 
-There's a wrapper for `read_entire_file` and `write_entire_file` from `core:os` that can files from `assets` directory, even on web. See `source/utils.odin`
-
 ### Web build troubleshooting
 
 See the README of the [Odin + Raylib on the web repository](https://github.com/karl-zylinski/odin-raylib-web?tab=readme-ov-file#troubleshooting) for troubleshooting steps.
@@ -72,6 +76,24 @@ See the README of the [Odin + Raylib on the web repository](https://github.com/k
 You can put assets such as textures, sounds and music in the `assets` folder. That folder will be copied when a release build is created and also integrated into the web build.
 
 The hot reload build doesn't do any copying, because the hot reload executable lives in the root of the repository, alongside the `assets` folder.
+
+## Auto-rebuild on save
+
+A file-watcher script re-runs `build_hot_reload` whenever any `.odin` file under `source/` changes. Leave the game running in one terminal, and the watcher in another:
+
+- **macOS / Linux:** `./watch.sh` (requires `fswatch` — install with `brew install fswatch`)
+- **Windows:** `watch.bat` (uses PowerShell's built-in `FileSystemWatcher`, no install)
+
+Saves the manual "go re-run the build script" step on every iteration.
+
+## In-game debug overlay
+
+`source/game.odin` includes a small raygui-based debug overlay with an FPS readout, player state, a speed slider, and a reset button. It lives inside `Game_Memory` so its settings survive hot reload.
+
+- `F3` — toggle the overlay
+- `F4` — pause the simulation (overlay stays interactive)
+
+Add more knobs by extending `Debug_State` and `draw_debug_overlay`. Raygui is already part of `vendor:raylib`, so no new dependencies are needed.
 
 ## Sublime Text
 
@@ -83,36 +105,12 @@ How to use:
 - Compile and run by pressing using F7 / Ctrl + B / Cmd + B
 - After you make code changes and want to hot reload, just hit F7 / Ctrl + B / Cmd + B again
 
+### Sublime LSP (autocomplete, hover, jump-to-def)
+
+Install the `LSP` and `LSP-odin` packages via Package Control, make sure the `odin` compiler is on your `PATH`, and the committed `ols.json` will be picked up automatically. OLS discovers its `core`/`vendor` collections by invoking `odin root`, so the same file works on macOS, Linux, and Windows.
+
 ## RAD Debugger
 You can hot reload while attached to [RAD Debugger](https://github.com/EpicGamesExt/raddebugger). Attach to your `game_hot_reload` executable, make code changes in your code editor and re-run the the `build_hot_reload` script to build and hot reload.
-
-## VS Code
-
-You can build, debug and hot reload from within VS Code. Open the template using `File -> Open Folder...`.
-
-Requirements for debugging to work:
-- Windows: [C++ build tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
-- Linux / Mac: [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)
-
-<img alt="Image showing  how to start debugging session by selecting Build Hot Reload from the dropdown in the Run and Debug sidebar" src="https://github.com/user-attachments/assets/e62d710b-06f1-4833-bb2a-ab95527cf38c" width="50%" title="Start debugging session by chooing 'Run Hot Reload' and pressing the green arrow button">
-
-Launch with `Run Hot Reload` launch task, see image above. After you make code changes press `Ctrl + Shift + B` to rebuild and hot reload.
-
-## Windows Debugging hacks
-On Windows the degugging while hot reloading works by outputting a new PDB each time the game DLL is built. It cleans up the PDBs when you do a fresh start. See `build_hot_reload.bat` for details.
-
-## Demo streams
-
-Streams that start from this template:
-- 48 hour "Odin Holiday Gamejam": https://www.youtube.com/playlist?list=PLxE7SoPYTef2XC-ObA811vIefj02uSGnB Every minute of the development is documented. The resulting game of the gamejam is here: https://zylinski.itch.io/the-legend-of-tuna
-- CAR RACER prototype: https://www.youtube.com/watch?v=KVbHJ_CLdkA
-- "point & click" prototype: https://www.youtube.com/watch?v=iRvs1Xr1W6o
-- Metroidvania / platform prototype: https://www.youtube.com/watch?v=kIxEMchPc3Y
-- Top-down adventure prototype: https://www.youtube.com/watch?v=cl8EOjOaoXc
-
-## Atlas builder
-
-The template works nicely together with my [atlas builder](https://github.com/karl-zylinski/atlas-builder). The atlas builder can build an atlas texture from a folder of png or aseprite files. Using an atlas can drastically reduce the number of draw calls your game uses. There's an example in that repository on how to set it up. The atlas generation step can easily be integrated into the build `bat` / `sh` files such as `build_hot_reload.bat`
 
 ## Questions?
 

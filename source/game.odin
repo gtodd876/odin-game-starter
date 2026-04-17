@@ -33,11 +33,17 @@ import rl "vendor:raylib"
 
 PIXEL_WINDOW_HEIGHT :: 180
 
+Debug_State :: struct {
+	show_overlay: bool,
+	paused:       bool,
+	player_speed: f32,
+	debug_draw:   bool,
+}
+
 Game_Memory :: struct {
 	player_pos: rl.Vector2,
-	player_texture: rl.Texture,
-	some_number: int,
 	run: bool,
+	debug: Debug_State,
 }
 
 g: ^Game_Memory
@@ -48,18 +54,23 @@ game_camera :: proc() -> rl.Camera2D {
 
 	return {
 		zoom = h/PIXEL_WINDOW_HEIGHT,
-		target = g.player_pos,
+		// Fixed camera anchored at world origin so the player visibly moves on
+		// screen. Change `target` to `g.player_pos` for a follow-cam.
+		target = {0, 0},
 		offset = { w/2, h/2 },
 	}
 }
 
-ui_camera :: proc() -> rl.Camera2D {
-	return {
-		zoom = f32(rl.GetScreenHeight())/PIXEL_WINDOW_HEIGHT,
-	}
-}
-
 update :: proc() {
+	if rl.IsKeyPressed(.F3) do g.debug.show_overlay = !g.debug.show_overlay
+	if rl.IsKeyPressed(.F4) do g.debug.paused = !g.debug.paused
+
+	if rl.IsKeyPressed(.ESCAPE) {
+		g.run = false
+	}
+
+	if g.debug.paused do return
+
 	input: rl.Vector2
 
 	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) {
@@ -76,32 +87,53 @@ update :: proc() {
 	}
 
 	input = linalg.normalize0(input)
-	g.player_pos += input * rl.GetFrameTime() * 100
-	g.some_number += 1
+	g.player_pos += input * rl.GetFrameTime() * g.debug.player_speed
+}
 
-	if rl.IsKeyPressed(.ESCAPE) {
-		g.run = false
+draw_debug_overlay :: proc() {
+	if !g.debug.show_overlay do return
+
+	rl.GuiPanel({8, 8, 240, 200}, "debug  [F3 hide  F4 pause]")
+
+	rl.DrawText(fmt.ctprintf("%d fps", rl.GetFPS()),                        16, 40, 10, rl.BLACK)
+	rl.DrawText(fmt.ctprintf("pos %.1f, %.1f", g.player_pos.x, g.player_pos.y), 16, 56, 10, rl.BLACK)
+	if g.debug.paused {
+		rl.DrawText("PAUSED", 200, 40, 10, rl.MAROON)
 	}
+
+	rl.GuiSlider(
+		{70, 96, 120, 16},
+		"speed",
+		fmt.ctprintf("%.0f", g.debug.player_speed),
+		&g.debug.player_speed,
+		0, 400,
+	)
+
+	if rl.GuiButton({16, 124, 100, 20}, "reset pos") {
+		g.player_pos = {}
+	}
+	rl.GuiCheckBox({16, 156, 16, 16}, "draw debug", &g.debug.debug_draw)
 }
 
 draw :: proc() {
 	rl.BeginDrawing()
-	rl.ClearBackground(rl.BLACK)
+	rl.ClearBackground(rl.BLUE)
 
 	rl.BeginMode2D(game_camera())
-	rl.DrawTextureEx(g.player_texture, g.player_pos, 0, 1, rl.WHITE)
-	rl.DrawRectangleV({20, 20}, {10, 10}, rl.RED)
-	rl.DrawRectangleV({-30, -20}, {10, 10}, rl.GREEN)
+	rl.DrawRectangleV(g.player_pos, {16, 16}, rl.RAYWHITE)
+
+	if g.debug.debug_draw {
+		rl.DrawRectangleLinesEx({g.player_pos.x, g.player_pos.y, 16, 16}, 1, rl.MAGENTA)
+		rl.DrawLineV({-5, 0}, {5, 0}, rl.YELLOW)
+		rl.DrawLineV({0, -5}, {0, 5}, rl.YELLOW)
+	}
 	rl.EndMode2D()
 
-	rl.BeginMode2D(ui_camera())
-
-	// NOTE: `fmt.ctprintf` uses the temp allocator. The temp allocator is
-	// cleared at the end of the frame by the main application, meaning inside
-	// `main_hot_reload.odin`, `main_release.odin` or `main_web_entry.odin`.
-	rl.DrawText(fmt.ctprintf("some_number: %v\nplayer_pos: %v", g.some_number, g.player_pos), 5, 5, 8, rl.WHITE)
-
-	rl.EndMode2D()
+	// Debug overlay is drawn in screen space (no camera) so its controls sit
+	// on top of everything. `fmt.ctprintf` uses the temp allocator, which is
+	// freed at end-of-frame by the host in main_hot_reload.odin /
+	// main_release.odin / main_web_entry.odin.
+	draw_debug_overlay()
 
 	rl.EndDrawing()
 }
@@ -118,7 +150,7 @@ game_update :: proc() {
 @(export)
 game_init_window :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
-	rl.InitWindow(1280, 720, "Odin + Raylib + Hot Reload template!")
+	rl.InitWindow(1280, 720, "Tetris with John")
 	rl.SetWindowPosition(200, 200)
 	rl.SetTargetFPS(500)
 	rl.SetExitKey(nil)
@@ -130,11 +162,7 @@ game_init :: proc() {
 
 	g^ = Game_Memory {
 		run = true,
-		some_number = 100,
-
-		// You can put textures, sounds and music in the `assets` folder. Those
-		// files will be part any release or web build.
-		player_texture = rl.LoadTexture("assets/round_cat.png"),
+		debug = { show_overlay = true, player_speed = 100 },
 	}
 
 	game_hot_reloaded(g)

@@ -15,19 +15,19 @@
 			overflow: hidden; 
 			background-color: black;
 		}
-		canvas.game_canvas { 
-			border: 0px none; 
+		canvas.game_canvas {
+			border: 0px none;
 			background-color: black;
-			padding-left: 0;
-			padding-right: 0;
-			margin-left: auto;
-			margin-right: auto;
 			display: block;
+			margin: 0 auto;
+			image-rendering: pixelated;
+			max-width: 100vw;
+			max-height: 100vh;
 		}
 	</style>
 </head>
 <body>
-	<canvas class="game_canvas" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" onmousedown="event.target.focus()" onkeydown="event.preventDefault()"></canvas>
+	<canvas class="game_canvas" id="canvas" width="1280" height="720" oncontextmenu="event.preventDefault()" tabindex="-1" onmousedown="event.target.focus()" onkeydown="event.preventDefault()"></canvas>
 	<script type="text/javascript" src="odin.js"></script>
 	<script>
 		var odinMemoryInterface = new odin.WasmMemoryInterface();

@@ -7,7 +7,9 @@ set OUT_DIR=build\web
 if not exist %OUT_DIR% mkdir %OUT_DIR%
 
 set EMSDK_QUIET=1
-call %EMSCRIPTEN_SDK_DIR%\emsdk_env.bat
+if exist "%EMSCRIPTEN_SDK_DIR%\emsdk_env.bat" (
+    call "%EMSCRIPTEN_SDK_DIR%\emsdk_env.bat"
+)
 
 :: Note RAYLIB_WASM_LIB=env.o -- env.o is an internal WASM object file. You can
 :: see how RAYLIB_WASM_LIB is used inside <odin>/vendor/raylib/raylib.odin.
@@ -23,7 +25,7 @@ for /f "delims=" %%i in ('odin root') do set "ODIN_PATH=%%i"
 
 copy "%ODIN_PATH%\core\sys\wasm\js\odin.js" %OUT_DIR%
 
-set files=%OUT_DIR%\game.wasm.o "%ODIN_PATH%\vendor\raylib\wasm\libraylib.a" "%ODIN_PATH%\vendor\raylib\wasm\libraygui.a"
+set files=%OUT_DIR%\game.wasm.o vendor\raylib\wasm\libraylib.a vendor\raylib\wasm\libraygui.a
 
 :: index_template.html contains the javascript code that calls the procedures in
 :: source/main_web/main_web.odin
