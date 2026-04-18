@@ -65,7 +65,7 @@ put_chunk_into_tilemap :: proc(tilemap : ^Tilemap, chunk_x, chunk_y : int, tiles
 			tile_val := tiles[(i_y*chunk_width)+i_x]
 			tilemap_put_tile(tilemap, tile_x, tile_y, tile_val)
 		}
-	} 
+	}
 
 }
 
@@ -101,9 +101,7 @@ update :: proc() {
 	// These are planned to be enum values once
 	//... if we have an actual editor where we are placing these things
 
-	
 	tilemap := &g.gs.tilemap
-
 
 	if rl.IsKeyPressed(.F3) do g.debug.show_overlay = !g.debug.show_overlay
 	if rl.IsKeyPressed(.F4) do g.debug.paused = !g.debug.paused
@@ -133,7 +131,7 @@ update :: proc() {
 
 	if IsKeyPressed(.SPACE) {
 		if g.gs.is_chunk_selection_active {
-			hovered_tiles := tilemap_get_chunk_tiles(tilemap, 
+			hovered_tiles := tilemap_get_chunk_tiles(tilemap,
 				g.gs.hovered_chunk.x, g.gs.hovered_chunk.y)
 			selected_tiles := tilemap_get_chunk_tiles(tilemap,
 				g.gs.selected_chunk.x, g.gs.selected_chunk.y)
@@ -143,7 +141,7 @@ update :: proc() {
 			g.gs.is_chunk_selection_active = false
 		} else {
 			g.gs.is_chunk_selection_active = true
-			g.gs.selected_chunk = g.gs.hovered_chunk			
+			g.gs.selected_chunk = g.gs.hovered_chunk
 		}
 	}
 
