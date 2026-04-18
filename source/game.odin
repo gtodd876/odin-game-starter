@@ -95,7 +95,8 @@ Debug_State :: struct {
 
 
 zoom_timer_duration_sec : f32 = 0.25
-camera_zoom_rearrange_mode : f32 = 0.5
+camera_zoom_rearrange_mode : f32 = 0.4
+selector_move_duration : f32 = 0.2
 
 
 // Doesn't contain any "meta" state like
@@ -104,6 +105,7 @@ Game_State :: struct {
 	player_pos: rl.Vector2,      // derived each frame from crab pos; kept here for rendering/debug
 	hovered_chunk : [2]int,
 	is_chunk_selection_active : bool,
+	selector_move_timer : f32,
 	selected_chunk : [2]int,
 	current_level : int,
 	tilemap : Tilemap,
@@ -115,13 +117,20 @@ Game_State :: struct {
 	is_rearranging_chunks : bool,
 	zoom_timer : f32,
 	camera_zoom : f32,
+	camera_target : [2]f32,
 	crab: Crab_Pos,
 }
 
 level_cap :: 32 // just add more if there ends up being more
 num_levels :: 10 // just add more if there ends up being more
 
+play_sound_by_name :: proc(name : string) {
+	m_sound := g.sfx_bank[name]
+	rl.PlaySound(m_sound)
+}
+
 Game_Memory :: struct {
+	sfx_bank : map[string]rl.Sound,
 	render_texture : rl.RenderTexture2D,
 	old_input_state : All_Input_State,
 	input_state : All_Input_State,
@@ -135,6 +144,7 @@ Game_Memory :: struct {
 
 g: ^Game_Memory
 
+
 game_camera :: proc() -> rl.Camera2D {
 	// w := f32(rl.GetScreenWidth())
 	// h := f32(rl.GetScreenHeight())
@@ -146,7 +156,7 @@ game_camera :: proc() -> rl.Camera2D {
 		zoom = g.gs.camera_zoom,
 		// Fixed camera anchored at world origin so the player visibly moves on
 		// screen. Change `target` to `g.gs.player_pos` for a follow-cam.
-		target = {0, 0},
+		target = g.gs.camera_target,
 		offset = { w/2, h/2 },
 	}
 }
@@ -186,6 +196,7 @@ draw_debug_overlay :: proc() {
 game_init_window :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
 	rl.InitWindow(1280, 720, "Cabin Jam 2026")
+	rl.InitAudioDevice()
 	rl.SetWindowPosition(200, 200)
 	rl.SetTargetFPS(60)
 	rl.SetExitKey(nil)
@@ -235,6 +246,15 @@ game_init :: proc() {
 	g.levels[5] = init_tilemap_by_specifying_chunks(5, 5)
 	g.levels[6] = init_tilemap_by_specifying_chunks(4, 4)
 	g.levels[7] = init_tilemap_by_specifying_chunks(4, 4)
+
+	g.sfx_bank["smack"] = rl.LoadSound("assets/billiard-pool-hit.wav")
+	g.sfx_bank["angel-choir"] = rl.LoadSound("assets/angel-choir.wav")
+	g.sfx_bank["powder-impact"] = rl.LoadSound("assets/SFX_impactpunchbag01.wav")
+	g.sfx_bank["woosh"] = rl.LoadSound("assets/SFX_EquipEquipmentOnev1.wav")
+	g.sfx_bank["ui-move-1"] = rl.LoadSound("assets/SFX_Clickv1variation01.wav")
+	g.sfx_bank["ui-move-2"] = rl.LoadSound("assets/SFX_SelectionEquipmentTwov1.wav")
+	g.sfx_bank["confirm"] = rl.LoadSound("assets/Confirm.wav")
+	g.sfx_bank["put-chunk"] = rl.LoadSound("assets/SFX_OptionChangev7.wav")
 
 
 	game_hot_reloaded(g)

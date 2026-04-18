@@ -10,7 +10,7 @@ import "base:runtime"
 import "core:fmt"
 import "core:math"
 import "core:os"
-
+import "core:math/linalg"
 
 @(export)
 game_update :: proc() {
@@ -238,10 +238,13 @@ update_crab :: proc() {
 	}
 
 	// 1. Latest WASD press sets queued direction.
-	if      IsKeyPressed(.W) do gs.queued_direction = .Up
-	else if IsKeyPressed(.S) do gs.queued_direction = .Down
-	else if IsKeyPressed(.A) do gs.queued_direction = .Left
-	else if IsKeyPressed(.D) do gs.queued_direction = .Right
+	if !g.gs.is_rearranging_chunks {
+		if      IsKeyDown(.W) || IsKeyDown(.UP) do gs.queued_direction = .Up
+		else if IsKeyDown(.S) || IsKeyDown(.DOWN) do gs.queued_direction = .Down
+		else if IsKeyDown(.A) || IsKeyDown(.LEFT) do gs.queued_direction = .Left
+		else if IsKeyDown(.D) || IsKeyDown(.RIGHT) do gs.queued_direction = .Right
+	}
+		
 
 	// 2. Reversal is allowed mid-tile.
 	if gs.move_state == .Moving &&
@@ -266,7 +269,11 @@ update_crab :: proc() {
 	dv := direction_vector(gs.current_direction)
 	dv_f := [2]f32{f32(dv.x), f32(dv.y)}
 	pre_rel := gs.crab.rel_pos
-	gs.crab.rel_pos += dv_f * gs.move_speed * rl.GetFrameTime()
+	move_speed := gs.move_speed
+	if g.gs.is_rearranging_chunks {
+		move_speed *= 0.1
+	}
+	gs.crab.rel_pos += dv_f * move_speed * rl.GetFrameTime()
 
 	// 5. Detect tile-center crossing. Tile centers sit at half-integers;
 	// shift by -0.5 so they sit at integers, and a crossing is a change in
@@ -409,50 +416,85 @@ update :: proc() {
 			g.gs.zoom_timer = zoom_timer_duration_sec
 		}
 
+		crab_wpos : = crab_world_pos(tilemap, g.gs.crab)
+
+
 		if g.gs.zoom_timer > 0 {
 			g.gs.zoom_timer -= rl.GetFrameTime()
 			if g.gs.zoom_timer < 0 do g.gs.zoom_timer = 0
-			p := 1.0 - ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))
+			p := 1.0 - ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
 			if g.gs.is_rearranging_chunks {
-				g.gs.camera_zoom = rl.Lerp(1.0, camera_zoom_rearrange_mode, p)
+				g.gs.camera_target = linalg.lerp(crab_wpos, [2]f32{0,0}, p)
+				g.gs.camera_zoom = linalg.lerp(f32(1.0), camera_zoom_rearrange_mode, p)
 			} else {
-				g.gs.camera_zoom = rl.Lerp(camera_zoom_rearrange_mode, 1.0, p)
+				g.gs.camera_target = linalg.lerp([2]f32{0,0}, crab_wpos, p)
+				g.gs.camera_zoom = linalg.lerp(camera_zoom_rearrange_mode, f32(1.0), p)
 			}
-		}
-	}
-
-	if IsKeyPressed(.UP)    do g.gs.hovered_chunk.y -= 1
-	if IsKeyPressed(.DOWN)  do g.gs.hovered_chunk.y += 1
-	if IsKeyPressed(.LEFT)  do g.gs.hovered_chunk.x -= 1
-	if IsKeyPressed(.RIGHT) do g.gs.hovered_chunk.x += 1
-
-	if IsKeyPressed(.SPACE) {
-		if g.gs.is_chunk_selection_active {
-			hovered_tiles := tilemap_get_chunk_tiles(tilemap,
-				g.gs.hovered_chunk.x, g.gs.hovered_chunk.y)
-			selected_tiles := tilemap_get_chunk_tiles(tilemap,
-				g.gs.selected_chunk.x, g.gs.selected_chunk.y)
-
-			set_chunk_tiles_in_tilemap(tilemap, g.gs.hovered_chunk.x, g.gs.hovered_chunk.y, selected_tiles[:])
-			set_chunk_tiles_in_tilemap(tilemap, g.gs.selected_chunk.x, g.gs.selected_chunk.y, hovered_tiles[:])
-
-			// Crab rides along with whichever chunk was swapped out from under it.
-			if g.gs.crab.chunk == g.gs.hovered_chunk {
-				g.gs.crab.chunk = g.gs.selected_chunk
-			} else if g.gs.crab.chunk == g.gs.selected_chunk {
-				g.gs.crab.chunk = g.gs.hovered_chunk
-			}
-			g.gs.player_pos = crab_world_pos(tilemap, g.gs.crab)
-
-			g.gs.is_chunk_selection_active = false
 		} else {
-			g.gs.is_chunk_selection_active = true
-			g.gs.selected_chunk = g.gs.hovered_chunk
+			if g.gs.is_rearranging_chunks {
+				g.gs.camera_target = {}
+			} else {
+				g.gs.camera_target = crab_wpos
+			}
 		}
 	}
+
+	if g.gs.is_rearranging_chunks {
+		if IsKeyPressed(.UP)    {
+			play_sound_by_name("ui-move-1")
+			g.gs.hovered_chunk.y -= 1
+		}
+		if IsKeyPressed(.DOWN)  {
+			play_sound_by_name("ui-move-1")
+
+			g.gs.hovered_chunk.y += 1
+		}
+		if IsKeyPressed(.LEFT)  {
+			play_sound_by_name("ui-move-1")
+			
+			g.gs.hovered_chunk.x -= 1
+		}
+		if IsKeyPressed(.RIGHT) {
+			play_sound_by_name("ui-move-1")
+			
+			g.gs.hovered_chunk.x += 1
+		}
+
+		if IsKeyPressed(.SPACE) {
+			if g.gs.is_chunk_selection_active {
+				play_sound_by_name("smack")
+				hovered_tiles := tilemap_get_chunk_tiles(tilemap,
+					g.gs.hovered_chunk.x, g.gs.hovered_chunk.y)
+				selected_tiles := tilemap_get_chunk_tiles(tilemap,
+					g.gs.selected_chunk.x, g.gs.selected_chunk.y)
+
+				set_chunk_tiles_in_tilemap(tilemap, g.gs.hovered_chunk.x, g.gs.hovered_chunk.y, selected_tiles[:])
+				set_chunk_tiles_in_tilemap(tilemap, g.gs.selected_chunk.x, g.gs.selected_chunk.y, hovered_tiles[:])
+
+				// Crab rides along with whichever chunk was swapped out from under it.
+				if g.gs.crab.chunk == g.gs.hovered_chunk {
+					g.gs.crab.chunk = g.gs.selected_chunk
+				} else if g.gs.crab.chunk == g.gs.selected_chunk {
+					g.gs.crab.chunk = g.gs.hovered_chunk
+				}
+				g.gs.player_pos = crab_world_pos(tilemap, g.gs.crab)
+
+				g.gs.is_chunk_selection_active = false
+			} else {
+				play_sound_by_name("put-chunk")
+				g.gs.is_chunk_selection_active = true
+				g.gs.selected_chunk = g.gs.hovered_chunk
+			}
+		}
+
+	}
+
 
 	// NOTE(john) make sure selection stays within the bounds
 	// of the overall chunk arrangemetn
+	//
+	// Also if there are empty tilemaps with 0 dimensions
+	// this will crash
 	g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
 	g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
 
