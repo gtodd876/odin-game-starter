@@ -543,21 +543,23 @@ update :: proc() {
 				chunk_pos.x, chunk_pos.y, chunk_width_in_units, chunk_height_in_units
 			}
 			color := rl.YELLOW
-			color.a = g.gs.is_rearranging_chunks ? 100 : 10
-
+			color.a = g.gs.is_rearranging_chunks ? 10 : 10
+			rl.DrawRectangleLinesEx(chunk_rect, 4, color)
 			// Note(john) using term chunk id to refer to the 2D index
 			// which can really be thought of as an integer coordinate
 			// system
-			chunk_id := [2]int{chunk_x, chunk_y}
-			if chunk_id == g.gs.hovered_chunk {
-				color.a = 255
-			} else if g.gs.is_chunk_selection_active {
-				if chunk_id == g.gs.selected_chunk  {
-					color = rl.WHITE
+			if g.gs.is_rearranging_chunks {
+				chunk_id := [2]int{chunk_x, chunk_y}
+				if chunk_id == g.gs.hovered_chunk {
+					color.a = 255
+				} else if g.gs.is_chunk_selection_active {
+					if chunk_id == g.gs.selected_chunk  {
+						color = rl.WHITE
+					}
 				}
-			}
 
-			rl.DrawRectangleLinesEx(chunk_rect, 4, color)
+				rl.DrawRectangleLinesEx(chunk_rect, 4, color)
+			}
 		}
 	}
 
