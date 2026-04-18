@@ -56,18 +56,10 @@ chunk_height_f : f32 : chunk_height
 
 tiles_in_chunk :: chunk_width * chunk_height
 
-Tilemap_Chunk :: struct {
-	tiles : [tiles_in_chunk]int,
-}
 
-max_chunks :: 10
+max_chunks :: 36
 max_tiles :: tiles_in_chunk*max_chunks
 
-Chunk_Arrangement :: struct {
-	chunks : [max_chunks]Tilemap_Chunk,
-	width : int,
-	height : int,
-}
 
 Tilemap :: struct {
 	tiles : [max_tiles]int,
@@ -97,6 +89,8 @@ Game_State :: struct {
 	tilemap : Tilemap,
 }
 
+level_cap :: 32 // just add more if there ends up being more
+num_levels :: 10 // just add more if there ends up being more
 
 Game_Memory :: struct {
 	render_texture : rl.RenderTexture2D,
@@ -104,6 +98,7 @@ Game_Memory :: struct {
 	input_state : All_Input_State,
 	irs : Input_Recording_State,
 	gs : Game_State,
+	levels : [level_cap]Tilemap, 
 	run: bool,
 	debug: Debug_State,
 }
@@ -179,42 +174,6 @@ game_init :: proc() {
 
 	tilemap := init_tilemap_by_specifying_chunks(3, 2)
 
-	tilemap_chunk00 := [?]int{
-			1,1,1,1,1,
-			1,1,1,1,1,
-			1,1,0,0,0,
-			1,1,0,1,1,
-			1,1,0,1,1,
-
-	}
-	tilemap_chunk01 := [?]int{
-			1,1,0,1,1,
-			1,1,0,1,1,
-			1,1,0,0,0,
-			1,1,1,1,1,
-			1,1,1,1,1,
-
-	}
-	tilemap_chunk02 := [?]int{
-			1,1,1,1,1,
-			1,1,1,1,1,
-			0,0,0,1,1,
-			1,1,0,1,1,
-			1,1,0,1,1,
-
-	}
-	tilemap_chunk03 := [?]int{
-			1,1,0,1,1,
-			1,1,0,1,1,
-			0,0,0,1,1,
-			1,1,1,1,1,
-			1,1,1,1,1,
-	}
-
-	set_chunk_tiles_in_tilemap(&tilemap, 0, 0, tilemap_chunk00[:])
-	set_chunk_tiles_in_tilemap(&tilemap, 0, 1, tilemap_chunk01[:])
-	set_chunk_tiles_in_tilemap(&tilemap, 1, 0, tilemap_chunk02[:])
-	set_chunk_tiles_in_tilemap(&tilemap, 1, 1, tilemap_chunk03[:])
 	g.gs.tilemap = tilemap
 
 	game_hot_reloaded(g)

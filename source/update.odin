@@ -6,6 +6,10 @@ package game
 
 import rl "vendor:raylib"
 import "base:intrinsics"
+import "base:runtime"
+import "core:fmt"
+import "core:os"
+
 
 @(export)
 game_update :: proc() {
@@ -111,6 +115,25 @@ tilemap_get_chunk_tiles ::proc(tilemap : ^Tilemap, chunk_x, chunk_y : int) -> [t
 	return tilemap_chunk
 }
 
+data_file_filename :: "data"
+
+t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
+	s : Serializer
+	data, rerr := os.read_entire_file_from_path(data_file_filename, allocator)
+	if rerr != nil {
+		fmt.printfln("error reading from data file")
+		return false
+	}
+	serializer_init_reader(&s, data[:])
+	ok := serialize(&s, &g.gs.tilemap)
+	if !ok  {
+		fmt.printfln("error serializing reader")
+		return false
+	}
+
+	
+	return true
+}
 
 
 update :: proc() {
@@ -126,6 +149,25 @@ update :: proc() {
 
 	if rl.IsKeyPressed(.ESCAPE) {
 		g.run = false
+	}
+
+	save_button := rl.KeyboardKey.F12
+	if rl.IsKeyPressed(save_button) {
+		s : Serializer
+		serializer_init_writer(&s, allocator = context.temp_allocator)
+		ok := serialize(&s, &g.gs.tilemap)
+		werr := os.write_entire_file(data_file_filename, s.data[:])
+		if werr != nil {
+			fmt.printfln("error writing file to data file")
+		}
+		// else if werr == nil && ok {
+		// 	save_message_timer = save_message_duration_sec
+		// }
+	}
+
+	load_button := rl.KeyboardKey.F11
+	if rl.IsKeyPressed(load_button) {
+		t_load_data(context.temp_allocator)
 	}
 
 	if g.debug.paused do return
