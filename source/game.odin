@@ -99,6 +99,8 @@ Debug_State :: struct {
 	paused:       bool,
 	player_speed: f32,
 	debug_draw:   bool,
+	force_reload_requested:  bool,
+	force_restart_requested: bool,
 }
 
 
@@ -128,6 +130,7 @@ Game_State :: struct {
 	camera_target : [2]f32,
 	crab: Crab_Pos,
 	num_keys_crab_has : int,
+	elapsed_time: f32,
 }
 
 level_cap :: 32 // just add more if there ends up being more
@@ -153,7 +156,10 @@ Game_Memory :: struct {
 	coon_texture: rl.Texture2D,
 	key_texture: rl.Texture2D,
 	lock_texture: rl.Texture2D,
-	flag_texture: rl.Texture2D
+	flag_texture: rl.Texture2D,
+	lcd_font: rl.Font,
+	dmg_shader: rl.Shader,
+	dmg_enabled: bool,
 }
 
 g: ^Game_Memory
@@ -181,26 +187,64 @@ game_camera :: proc() -> rl.Camera2D {
 draw_debug_overlay :: proc() {
 	if !g.debug.show_overlay do return
 
-	rl.GuiPanel({8, 8, 240, 200}, "debug  [F3 hide  F4 pause]")
+	panel := rl.Rectangle{8, 140, 280, 362}
+	rl.GuiPanel(panel, "debug  [F3 hide  F4 pause]")
 
-	rl.DrawText(fmt.ctprintf("%d fps", rl.GetFPS()),                        16, 40, 10, rl.BLACK)
-	rl.DrawText(fmt.ctprintf("pos %.1f, %.1f", g.gs.player_pos.x, g.gs.player_pos.y), 16, 56, 10, rl.BLACK)
+	px := panel.x
+	py := panel.y + 28
+
+	rl.DrawText(fmt.ctprintf("%d fps", rl.GetFPS()),                                   i32(px)+8, i32(py),    10, rl.BLACK)
+	rl.DrawText(fmt.ctprintf("pos %.1f, %.1f", g.gs.player_pos.x, g.gs.player_pos.y), i32(px)+8, i32(py)+16, 10, rl.BLACK)
 	if g.debug.paused {
-		rl.DrawText("PAUSED", 200, 40, 10, rl.MAROON)
+		rl.DrawText("PAUSED", i32(px)+200, i32(py), 10, rl.MAROON)
 	}
 
 	rl.GuiSlider(
-		{70, 96, 120, 16},
+		{px+60, py+36, 120, 16},
 		"speed",
 		fmt.ctprintf("%.0f", g.debug.player_speed),
 		&g.debug.player_speed,
 		0, 400,
 	)
 
-	if rl.GuiButton({16, 124, 100, 20}, "reset pos") {
+	if rl.GuiButton({px+8, py+60, 120, 20}, "reset pos") {
 		g.gs.player_pos = {}
 	}
-	rl.GuiCheckBox({16, 156, 16, 16}, "draw debug", &g.debug.debug_draw)
+	rl.GuiCheckBox({px+136, py+62, 16, 16}, "draw debug", &g.debug.debug_draw)
+
+	// Save / load
+	if rl.GuiButton({px+8,   py+88, 120, 20}, "save (F10)") { t_save_data() }
+	if rl.GuiButton({px+136, py+88, 120, 20}, "load (F11)") { t_load_data(context.temp_allocator) }
+
+	// Hot reload / restart
+	if rl.GuiButton({px+8,   py+114, 120, 20}, "hot reload (F5)") { g.debug.force_reload_requested  = true }
+	if rl.GuiButton({px+136, py+114, 120, 20}, "restart (F6)")    { g.debug.force_restart_requested = true }
+
+	// Rearrange mode — sync zoom timer when state flips.
+	prev_rearrange := g.gs.is_rearranging_chunks
+	rl.GuiCheckBox({px+8, py+144, 16, 16}, "rearrange (Z)", &g.gs.is_rearranging_chunks)
+	if g.gs.is_rearranging_chunks != prev_rearrange {
+		g.gs.zoom_timer = zoom_timer_duration_sec
+	}
+
+	// Record / playback — label tracks the triple state.
+	rec_label : cstring = "record (L)"
+	if g.irs.is_recording do rec_label = "stop recording (L)"
+	if g.irs.is_playback  do rec_label = "stop playback (L)"
+	if rl.GuiButton({px+8, py+170, 248, 20}, rec_label) {
+		cycle_record_playback()
+	}
+
+	// Level slots 0-9.
+	rl.DrawText(fmt.ctprintf("level %d", g.gs.current_level), i32(px)+8, i32(py)+200, 10, rl.BLACK)
+	for i in 0..<10 {
+		bx := px + 8 + f32(i) * 25
+		if rl.GuiButton({bx, py+216, 23, 23}, fmt.ctprintf("%d", i)) {
+			swap_to_level(i)
+		}
+	}
+
+	rl.GuiCheckBox({px+8, py+250, 16, 16}, "DMG shader (F2)", &g.dmg_enabled)
 }
 
 
@@ -222,7 +266,7 @@ game_init :: proc() {
 
 	g^ = Game_Memory {
 		run = true,
-		debug = { show_overlay = true, player_speed = 100 },
+		debug = { show_overlay = false, player_speed = 100 },
 	}
 
 	g.render_texture = rl.LoadRenderTexture(1280, 720)
@@ -232,6 +276,30 @@ game_init :: proc() {
 	g.lock_texture = rl.LoadTexture("assets/lock.png")
 	g.flag_texture = rl.LoadTexture("assets/flag.png")
 	g.coon_texture = rl.LoadTexture("assets/coon.png")
+
+	g.lcd_font = rl.LoadFontEx("assets/fonts/LCD2B.TTF", 72, nil, 0)
+	rl.SetTextureFilter(g.lcd_font.texture, .POINT)
+
+	g.dmg_shader = rl.LoadShader(nil, "assets/shaders/gameboy_dmg.fs")
+	g.dmg_enabled = true
+	{
+		grid_size     : f32 = 4
+		grid_strength : f32 = 0.35
+		palette_as_vec4 :: proc(c: rl.Color) -> rl.Vector4 {
+			return {f32(c.r)/255.0, f32(c.g)/255.0, f32(c.b)/255.0, f32(c.a)/255.0}
+		}
+		p0 := palette_as_vec4(PALETTE_1)
+		p1 := palette_as_vec4(PALETTE_2)
+		p2 := palette_as_vec4(PALETTE_3)
+		p3 := palette_as_vec4(PALETTE_4)
+
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "gridSize"),     &grid_size,     .FLOAT)
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "gridStrength"), &grid_strength, .FLOAT)
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "palette0"), &p0, .VEC4)
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "palette1"), &p1, .VEC4)
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "palette2"), &p2, .VEC4)
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "palette3"), &p3, .VEC4)
+	}
 
 	tilemap := init_tilemap_by_specifying_chunks(3, 2)
 
@@ -296,6 +364,8 @@ game_should_run :: proc() -> bool {
 
 @(export)
 game_shutdown :: proc() {
+	rl.UnloadFont(g.lcd_font)
+	rl.UnloadShader(g.dmg_shader)
 	rl.UnloadTexture(g.crabby_texture)
 	free(g)
 }
@@ -325,12 +395,22 @@ game_hot_reloaded :: proc(mem: rawptr) {
 
 @(export)
 game_force_reload :: proc() -> bool {
-	return rl.IsKeyPressed(.F5)
+	if rl.IsKeyPressed(.F5) do return true
+	if g.debug.force_reload_requested {
+		g.debug.force_reload_requested = false
+		return true
+	}
+	return false
 }
 
 @(export)
 game_force_restart :: proc() -> bool {
-	return rl.IsKeyPressed(.F6)
+	if rl.IsKeyPressed(.F6) do return true
+	if g.debug.force_restart_requested {
+		g.debug.force_restart_requested = false
+		return true
+	}
+	return false
 }
 
 // In a web build, this is called when browser changes size. Remove the

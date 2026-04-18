@@ -16,16 +16,7 @@ import "core:math/linalg"
 game_update :: proc() {
 	// RECORD THEN IMMEDIATELY PLAYBACK
 	if rl.IsKeyPressed(.L) {
-		if g.irs.is_playback {
-			end_input_playback(&g.irs)
-			g.old_input_state = {}
-		} else if g.irs.is_recording {
-			end_recording_input(&g.irs)
-			begin_input_playback(&g.irs, &g.gs)
-			g.irs.playback_frame = 0
-		} else if !g.irs.is_recording && !g.irs.is_playback {
-			begin_recording_input(&g.irs, &g.gs)
-		}
+		cycle_record_playback()
 	}
 
 	update_all_input_state()
@@ -120,6 +111,35 @@ tilemap_get_chunk_tiles ::proc(tilemap : ^Tilemap, chunk_x, chunk_y : int) -> [t
 
 data_file_filename :: "data"
 
+t_save_data :: proc() {
+	s : Serializer
+	serializer_init_writer(&s, allocator = context.temp_allocator)
+	serialize(&s, &g.gs.tilemap)
+	werr := os.write_entire_file(data_file_filename, s.data[:])
+	if werr != nil {
+		fmt.printfln("error writing file to data file")
+	}
+}
+
+swap_to_level :: proc(i: int) {
+	g.levels[g.gs.current_level] = g.gs.tilemap
+	g.gs.tilemap = g.levels[i]
+	g.gs.current_level = i
+}
+
+cycle_record_playback :: proc() {
+	if g.irs.is_playback {
+		end_input_playback(&g.irs)
+		g.old_input_state = {}
+	} else if g.irs.is_recording {
+		end_recording_input(&g.irs)
+		begin_input_playback(&g.irs, &g.gs)
+		g.irs.playback_frame = 0
+	} else {
+		begin_recording_input(&g.irs, &g.gs)
+	}
+}
+
 t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 	s : Serializer
 	data, rerr := os.read_entire_file_from_path(data_file_filename, allocator)
@@ -134,7 +154,7 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 		return false
 	}
 
-	
+
 	return true
 }
 
@@ -245,7 +265,7 @@ update_crab :: proc() {
 		else if IsKeyDown(.A) || IsKeyDown(.LEFT) do gs.queued_direction = .Left
 		else if IsKeyDown(.D) || IsKeyDown(.RIGHT) do gs.queued_direction = .Right
 	}
-		
+
 
 	// 2. Reversal is allowed mid-tile.
 	if gs.move_state == .Moving &&
@@ -343,6 +363,7 @@ update :: proc() {
 
 	tilemap := &g.gs.tilemap
 
+	if rl.IsKeyPressed(.F2) do g.dmg_enabled = !g.dmg_enabled
 	if rl.IsKeyPressed(.F3) do g.debug.show_overlay = !g.debug.show_overlay
 	if rl.IsKeyPressed(.F4) do g.debug.paused = !g.debug.paused
 
@@ -350,19 +371,7 @@ update :: proc() {
 		g.run = false
 	}
 
-	save_button := rl.KeyboardKey.F10
-	if rl.IsKeyPressed(save_button) {
-		s : Serializer
-		serializer_init_writer(&s, allocator = context.temp_allocator)
-		ok := serialize(&s, &g.gs.tilemap)
-		werr := os.write_entire_file(data_file_filename, s.data[:])
-		if werr != nil {
-			fmt.printfln("error writing file to data file")
-		}
-		// else if werr == nil && ok {
-		// 	save_message_timer = save_message_duration_sec
-		// }
-	}
+	if rl.IsKeyPressed(.F10) do t_save_data()
 
 	{ // swap levels
 		level_keys := [?] rl.KeyboardKey {
@@ -378,14 +387,11 @@ update :: proc() {
 			rl.KeyboardKey.NINE,
 		}
 
-		// save the active one to the levels
+		// Keep the active slot in sync while editing so swapping out doesn't lose work.
 		g.levels[g.gs.current_level] = g.gs.tilemap
 
 		for level_key, i in level_keys {
-			if rl.IsKeyPressed(level_key) {
-				g.gs.tilemap = g.levels[i]
-				g.gs.current_level = i
-			}
+			if rl.IsKeyPressed(level_key) do swap_to_level(i)
 		}
 	}
 
@@ -403,12 +409,14 @@ update :: proc() {
 
 	if g.debug.paused do return
 
+	g.gs.elapsed_time += rl.GetFrameTime()
+
 	{ // editor stuff
 		mouse_screen := rl.GetMousePosition()
 		mouse_world := rl.GetScreenToWorld2D(mouse_screen, game_camera())
 		mouse_rel_tilemap := mouse_world - tilemap_world_origin(tilemap)
 		tile_x := int(mouse_rel_tilemap.x) / tile_size
-		tile_y := int(mouse_rel_tilemap.y) / tile_size	
+		tile_y := int(mouse_rel_tilemap.y) / tile_size
 		if (rl.IsMouseButtonDown(.LEFT)) {
 			tilemap_set_tile(tilemap, tile_x, tile_y, g.editor_selected_tile_type)
 		} else if rl.IsMouseButtonDown(.RIGHT) {
@@ -419,7 +427,7 @@ update :: proc() {
 	{
 		enter_rearrange_mode_key := rl.KeyboardKey.Z
 		if IsKeyPressed(enter_rearrange_mode_key) {
-			g.gs.is_rearranging_chunks = !g.gs.is_rearranging_chunks 
+			g.gs.is_rearranging_chunks = !g.gs.is_rearranging_chunks
 			g.gs.zoom_timer = zoom_timer_duration_sec
 		}
 
@@ -458,12 +466,12 @@ update :: proc() {
 		}
 		if IsKeyPressed(.LEFT)  {
 			play_sound_by_name("ui-move-1")
-			
+
 			g.gs.hovered_chunk.x -= 1
 		}
 		if IsKeyPressed(.RIGHT) {
 			play_sound_by_name("ui-move-1")
-			
+
 			g.gs.hovered_chunk.x += 1
 		}
 
@@ -662,6 +670,18 @@ update :: proc() {
 						rl.DrawRectangleLinesEx(chunk_rect, 20, color)
 					}
 				}
+				is_selected := g.gs.is_chunk_selection_active && chunk_id == g.gs.selected_chunk
+				is_hovered  := chunk_id == g.gs.hovered_chunk
+
+				// Selected wins over hovered so the white border shows
+				// immediately on the SPACE-press frame, before the player
+				// moves the cursor off the selected chunk.
+				if is_selected {
+					color = rl.WHITE
+					color.a = 255
+				} else if is_hovered {
+					color.a = 255
+				}
 
 			}
 		}
@@ -705,26 +725,47 @@ update :: proc() {
 		rl.BeginDrawing()
 		defer rl.EndDrawing()
 
-		rl.ClearBackground(rl.BLACK)
-
-
+		rl.ClearBackground(PALETTE_1)
 
 		screen_width := f32(rl.GetScreenWidth())
 		screen_height := f32(rl.GetScreenHeight())
 
-		scale := min(screen_width/f32(g.render_texture.texture.width), screen_height/f32(g.render_texture.texture.height))
-
-		src := rl.Rectangle{ 0, 0, f32(g.render_texture.texture.width), f32(-g.render_texture.texture.height) }
-
-		window_midpoint_x    := screen_width -  (f32(g.render_texture.texture.width)   * scale) / 2
-		window_midpoint_y    := screen_height - (f32(g.render_texture.texture.height)  * scale) / 2
+		scale := min(
+			screen_width  / f32(g.render_texture.texture.width),
+			screen_height / f32(g.render_texture.texture.height),
+		)
 		window_scaled_width  := f32(g.render_texture.texture.width)  * scale
 		window_scaled_height := f32(g.render_texture.texture.height) * scale
 
-		dst := rl.Rectangle{(screen_width - window_scaled_width)/2, (screen_height - window_scaled_height)/2, window_scaled_width, window_scaled_height}
+		src := rl.Rectangle{ 0, 0, f32(g.render_texture.texture.width), f32(-g.render_texture.texture.height) }
+		dst := rl.Rectangle{
+			(screen_width  - window_scaled_width)  / 2,
+			(screen_height - window_scaled_height) / 2,
+			window_scaled_width,
+			window_scaled_height,
+		}
+		if g.dmg_enabled do rl.BeginShaderMode(g.dmg_shader)
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
+		if g.dmg_enabled do rl.EndShaderMode()
 
-		// draw_debug_overlay()
+		hud_rect := rl.Rectangle{ 8, 8, screen_width / 6, 120 }
+		rl.DrawRectangleRounded       (hud_rect, 0.15, 8,    PALETTE_1)
+		rl.DrawRectangleRoundedLinesEx(hud_rect, 0.15, 8, 3, PALETTE_4)
+
+		minutes := int(g.gs.elapsed_time) / 60
+		seconds := int(g.gs.elapsed_time) % 60
+
+		rl.DrawTextEx(g.lcd_font, "TIME", {20, 12}, 40, 2, PALETTE_4)
+		rl.DrawTextEx(
+			g.lcd_font,
+			fmt.ctprintf("%02d:%02d", minutes, seconds),
+			{20, 52},
+			72,
+			2,
+			PALETTE_4,
+		)
+
+		draw_debug_overlay()
 
 	}
 }
