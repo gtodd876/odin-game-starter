@@ -33,6 +33,12 @@ import rl "vendor:raylib"
 
 PIXEL_WINDOW_HEIGHT :: 180
 
+// Gameboy-style 4-color palette, light -> dark.
+PALETTE_1 :: rl.Color{0xD0, 0xD0, 0x58, 0xFF}
+PALETTE_2 :: rl.Color{0xA0, 0xA8, 0x40, 0xFF}
+PALETTE_3 :: rl.Color{0x70, 0x80, 0x28, 0xFF}
+PALETTE_4 :: rl.Color{0x40, 0x50, 0x10, 0xFF}
+
 
 
 Tile_Type :: enum {
