@@ -101,44 +101,8 @@ update :: proc() {
 	// These are planned to be enum values once
 	//... if we have an actual editor where we are placing these things
 
-	tilemap := init_tilemap_by_specifying_chunks(2, 2)
-	tilemap_chunk00 := [?]int{
-			1,1,1,1,1,
-			1,0,0,0,1,
-			1,0,1,0,0,
-			1,0,1,1,1,
-			1,0,1,1,1,
-		
-	}
-	tilemap_chunk01 := [?]int{
-			1,0,1,1,1,
-			1,0,1,1,1,
-			1,0,0,0,0,
-			1,0,1,1,1,
-			1,0,1,1,1,
-		
-	}
-	tilemap_chunk02 := [?]int{
-			1,1,1,1,1,
-			1,1,1,1,1,
-			0,0,0,0,0,
-			1,1,1,1,1,
-			1,1,1,1,1,
-		
-	}
-	tilemap_chunk03 := [?]int{
-			1,1,1,1,1,
-			1,1,1,1,1,
-			0,0,1,1,1,
-			1,0,1,1,1,
-			1,1,1,1,1,
-	}
-
-	put_chunk_into_tilemap(&tilemap, 0, 0, tilemap_chunk00[:])
-	put_chunk_into_tilemap(&tilemap, 0, 1, tilemap_chunk01[:])
-	put_chunk_into_tilemap(&tilemap, 1, 0, tilemap_chunk02[:])
-	put_chunk_into_tilemap(&tilemap, 1, 1, tilemap_chunk03[:])
-
+	
+	tilemap := &g.gs.tilemap
 
 
 	if rl.IsKeyPressed(.F3) do g.debug.show_overlay = !g.debug.show_overlay
@@ -168,8 +132,19 @@ update :: proc() {
 	}
 
 	if IsKeyPressed(.SPACE) {
-		g.gs.is_chunk_selection_active = true
-		g.gs.selected_chunk = g.gs.hovered_chunk
+		if g.gs.is_chunk_selection_active {
+			hovered_tiles := tilemap_get_chunk_tiles(tilemap, 
+				g.gs.hovered_chunk.x, g.gs.hovered_chunk.y)
+			selected_tiles := tilemap_get_chunk_tiles(tilemap,
+				g.gs.selected_chunk.x, g.gs.selected_chunk.y)
+
+			put_chunk_into_tilemap(tilemap, g.gs.hovered_chunk.x, g.gs.hovered_chunk.y, selected_tiles[:])
+			put_chunk_into_tilemap(tilemap, g.gs.selected_chunk.x, g.gs.selected_chunk.y, hovered_tiles[:])
+			g.gs.is_chunk_selection_active = false
+		} else {
+			g.gs.is_chunk_selection_active = true
+			g.gs.selected_chunk = g.gs.hovered_chunk			
+		}
 	}
 
 	// NOTE(john) make sure selection stays within the bounds
@@ -194,7 +169,7 @@ update :: proc() {
 
 	for chunk_x in 0..<tilemap.num_chunks_x {
 		for chunk_y in 0..<tilemap.num_chunks_y {
-			tilemap_chunk := tilemap_get_chunk_tiles(&tilemap, chunk_x, chunk_y)
+			tilemap_chunk := tilemap_get_chunk_tiles(tilemap, chunk_x, chunk_y)
 			chunk_pos := [2]f32{
 				arrangement_pos.x + (tile_size_f*chunk_width_f*f32(chunk_x)),
 				arrangement_pos.y + (tile_size_f*chunk_width_f*f32(chunk_y)),

@@ -94,6 +94,7 @@ Game_State :: struct {
 	hovered_chunk : [2]int,
 	is_chunk_selection_active : bool,
 	selected_chunk : [2]int,
+	tilemap : Tilemap,
 }
 
 
@@ -175,6 +176,45 @@ game_init :: proc() {
 	}
 
 	g.render_texture = rl.LoadRenderTexture(1280, 720)
+
+	tilemap := init_tilemap_by_specifying_chunks(2, 2)
+	tilemap_chunk00 := [?]int{
+			1,1,1,1,1,
+			1,0,0,0,1,
+			1,0,1,0,0,
+			1,0,1,1,1,
+			1,0,1,1,1,
+		
+	}
+	tilemap_chunk01 := [?]int{
+			1,0,1,1,1,
+			1,0,1,1,1,
+			1,0,0,0,0,
+			1,0,1,1,1,
+			1,0,1,1,1,
+		
+	}
+	tilemap_chunk02 := [?]int{
+			1,1,1,1,1,
+			1,1,1,1,1,
+			0,0,0,0,0,
+			1,1,1,1,1,
+			1,1,1,1,1,
+		
+	}
+	tilemap_chunk03 := [?]int{
+			1,1,1,1,1,
+			1,1,1,1,1,
+			0,0,1,1,1,
+			1,0,1,1,1,
+			1,1,1,1,1,
+	}
+
+	put_chunk_into_tilemap(&tilemap, 0, 0, tilemap_chunk00[:])
+	put_chunk_into_tilemap(&tilemap, 0, 1, tilemap_chunk01[:])
+	put_chunk_into_tilemap(&tilemap, 1, 0, tilemap_chunk02[:])
+	put_chunk_into_tilemap(&tilemap, 1, 1, tilemap_chunk03[:])
+	g.gs.tilemap = tilemap
 
 	game_hot_reloaded(g)
 }
