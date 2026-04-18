@@ -39,7 +39,18 @@ PALETTE_2 :: rl.Color{0xA0, 0xA8, 0x40, 0xFF}
 PALETTE_3 :: rl.Color{0x70, 0x80, 0x28, 0xFF}
 PALETTE_4 :: rl.Color{0x40, 0x50, 0x10, 0xFF}
 
+Direction :: enum {
+	None,
+	Up,
+	Left,
+	Down,
+	Right
+}
 
+Moving_State :: enum {
+	Idle,
+	Moving
+}
 
 Tile_Type :: enum {
 	Trail,
@@ -60,7 +71,7 @@ Tilemap_Chunk :: struct {
 	tiles : [tiles_in_chunk]int,
 }
 
-max_chunks :: 10
+max_chunks :: 36
 max_tiles :: tiles_in_chunk*max_chunks
 
 Chunk_Arrangement :: struct {
@@ -95,6 +106,11 @@ Game_State :: struct {
 	is_chunk_selection_active : bool,
 	selected_chunk : [2]int,
 	tilemap : Tilemap,
+	move_state: Moving_State,
+	move_speed: f32,
+	current_direction: Direction,
+	queued_direction: Direction,
+	player_tile: [2]int
 }
 
 
@@ -106,6 +122,7 @@ Game_Memory :: struct {
 	gs : Game_State,
 	run: bool,
 	debug: Debug_State,
+	crabby_texture: rl.Texture2D
 }
 
 g: ^Game_Memory
@@ -177,6 +194,8 @@ game_init :: proc() {
 
 	g.render_texture = rl.LoadRenderTexture(1280, 720)
 
+	g.crabby_texture = rl.LoadTexture("assets/crab-still.png")
+
 	tilemap := init_tilemap_by_specifying_chunks(3, 2)
 
 	tilemap_chunk00 := [?]int{
@@ -206,7 +225,21 @@ game_init :: proc() {
 	tilemap_chunk03 := [?]int{
 			1,1,0,1,1,
 			1,1,0,1,1,
+			0,0,0,0,0,
+			1,1,1,1,1,
+			1,1,1,1,1,
+	}
+	tilemap_chunk04 := [?]int{
+			1,1,1,1,1,
+			1,1,1,1,1,
 			0,0,0,1,1,
+			1,1,0,1,1,
+			1,1,0,1,1,
+	}
+	tilemap_chunk05 := [?]int{
+			1,1,0,1,1,
+			1,1,0,1,1,
+			0,0,0,0,0,
 			1,1,1,1,1,
 			1,1,1,1,1,
 	}
@@ -215,7 +248,24 @@ game_init :: proc() {
 	set_chunk_tiles_in_tilemap(&tilemap, 0, 1, tilemap_chunk01[:])
 	set_chunk_tiles_in_tilemap(&tilemap, 1, 0, tilemap_chunk02[:])
 	set_chunk_tiles_in_tilemap(&tilemap, 1, 1, tilemap_chunk03[:])
+	set_chunk_tiles_in_tilemap(&tilemap, 2, 0, tilemap_chunk04[:])
+	set_chunk_tiles_in_tilemap(&tilemap, 2, 1, tilemap_chunk05[:])
 	g.gs.tilemap = tilemap
+
+	g.gs.current_direction = .None
+	g.gs.queued_direction  = .None
+	g.gs.move_state        = .Idle
+	g.gs.move_speed        = 4.0 // tiles per second
+
+	spawn: for ty in 0..<g.gs.tilemap.height {
+		for tx in 0..<g.gs.tilemap.width {
+			if tilemap_is_walkable(&g.gs.tilemap, tx, ty) {
+				g.gs.player_tile = {tx, ty}
+				g.gs.player_pos  = tile_center_world(&g.gs.tilemap, tx, ty)
+				break spawn
+			}
+		}
+	}
 
 	game_hot_reloaded(g)
 }
@@ -234,6 +284,7 @@ game_should_run :: proc() -> bool {
 
 @(export)
 game_shutdown :: proc() {
+	rl.UnloadTexture(g.crabby_texture)
 	free(g)
 }
 
