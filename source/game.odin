@@ -33,6 +33,31 @@ import rl "vendor:raylib"
 
 PIXEL_WINDOW_HEIGHT :: 180
 
+
+
+Tile_Type :: enum {
+	Trail,
+	Solid,
+}
+
+tile_size :: 64
+chunk_width :: 5
+chunk_height :: 5
+tiles_in_chunk :: chunk_width * chunk_height
+
+Tilemap_Chunk :: struct {
+	tiles : [tiles_in_chunk]int,
+}
+
+max_chunks_in_arrangement :: 10
+
+Chunk_Arrangement :: struct {
+	chunks : [max_chunks_in_arrangement]Tilemap_Chunk,
+	width : int,
+	height : int,
+}
+
+
 Debug_State :: struct {
 	show_overlay: bool,
 	paused:       bool,
@@ -78,6 +103,19 @@ game_camera :: proc() -> rl.Camera2D {
 
 update :: proc() {
 
+	// NOTE(john): these are ints in here only because its easy to write in code
+	// These are planned to be enum values once
+	//... if we have an actual editor where we are placing these things
+	tilemap_chunk := Tilemap_Chunk{
+		tiles = {
+			1,1,1,1,1,
+			1,0,0,0,0,
+			1,0,1,1,1,
+			1,0,1,1,1,
+			1,0,1,1,1,
+		}
+	}
+
 	if rl.IsKeyPressed(.F3) do g.debug.show_overlay = !g.debug.show_overlay
 	if rl.IsKeyPressed(.F4) do g.debug.paused = !g.debug.paused
 
@@ -104,36 +142,26 @@ update :: proc() {
 
 	input = linalg.normalize0(input)
 	g.gs.player_pos += input * rl.GetFrameTime() * g.debug.player_speed
-}
 
-draw_debug_overlay :: proc() {
-	if !g.debug.show_overlay do return
 
-	rl.GuiPanel({8, 8, 240, 200}, "debug  [F3 hide  F4 pause]")
-
-	rl.DrawText(fmt.ctprintf("%d fps", rl.GetFPS()),                        16, 40, 10, rl.BLACK)
-	rl.DrawText(fmt.ctprintf("pos %.1f, %.1f", g.gs.player_pos.x, g.gs.player_pos.y), 16, 56, 10, rl.BLACK)
-	if g.debug.paused {
-		rl.DrawText("PAUSED", 200, 40, 10, rl.MAROON)
-	}
-
-	rl.GuiSlider(
-		{70, 96, 120, 16},
-		"speed",
-		fmt.ctprintf("%.0f", g.debug.player_speed),
-		&g.debug.player_speed,
-		0, 400,
-	)
-
-	if rl.GuiButton({16, 124, 100, 20}, "reset pos") {
-		g.gs.player_pos = {}
-	}
-	rl.GuiCheckBox({16, 156, 16, 16}, "draw debug", &g.debug.debug_draw)
-}
-
-draw :: proc() {
 	rl.BeginTextureMode(g.render_texture)
 	rl.ClearBackground(rl.BLUE)
+
+	chunk_pos := [2]f32 {0, 0}
+	for x in 0..<chunk_width {
+		for y in 0..<chunk_height {
+			i := y*chunk_width + x
+			tile_type := tilemap_chunk.tiles[i]
+			color := Tile_Type(tile_type) == .Solid ? rl.BLACK : rl.WHITE
+			rect := rl.Rectangle {
+				chunk_pos.x + (tile_size*f32(x)),
+				chunk_pos.y + (tile_size*f32(y)),
+				tile_size,
+				tile_size,
+			}
+			rl.DrawRectangleRec(rect, color)
+		} 
+	}
 
 	rl.BeginMode2D(game_camera())
 	rl.DrawRectangleV(g.gs.player_pos, {16, 16}, rl.RAYWHITE)
@@ -177,9 +205,40 @@ draw :: proc() {
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
 		
 		draw_debug_overlay()
-		
+
 	}
 }
+
+draw_debug_overlay :: proc() {
+	if !g.debug.show_overlay do return
+
+	rl.GuiPanel({8, 8, 240, 200}, "debug  [F3 hide  F4 pause]")
+
+	rl.DrawText(fmt.ctprintf("%d fps", rl.GetFPS()),                        16, 40, 10, rl.BLACK)
+	rl.DrawText(fmt.ctprintf("pos %.1f, %.1f", g.gs.player_pos.x, g.gs.player_pos.y), 16, 56, 10, rl.BLACK)
+	if g.debug.paused {
+		rl.DrawText("PAUSED", 200, 40, 10, rl.MAROON)
+	}
+
+	rl.GuiSlider(
+		{70, 96, 120, 16},
+		"speed",
+		fmt.ctprintf("%.0f", g.debug.player_speed),
+		&g.debug.player_speed,
+		0, 400,
+	)
+
+	if rl.GuiButton({16, 124, 100, 20}, "reset pos") {
+		g.gs.player_pos = {}
+	}
+	rl.GuiCheckBox({16, 156, 16, 16}, "draw debug", &g.debug.debug_draw)
+}
+
+draw :: proc() {
+	
+}
+
+
 
 @(export)
 game_update :: proc() {
@@ -208,7 +267,7 @@ game_update :: proc() {
 	g.old_input_state = g.input_state
 	
 	update()
-	draw()
+	
 
 	// Everything on tracking allocator is valid until end-of-frame.
 	free_all(context.temp_allocator)
