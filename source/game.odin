@@ -122,7 +122,11 @@ Game_Memory :: struct {
 	levels : [level_cap]Tilemap,
 	run: bool,
 	debug: Debug_State,
-	crabby_texture: rl.Texture2D
+	crabby_texture: rl.Texture2D,
+	coon_texture: rl.Texture2D,
+	key_texture: rl.Texture2D,
+	lock_texture: rl.Texture2D,
+	flag_texture: rl.Texture2D
 }
 
 g: ^Game_Memory
@@ -195,6 +199,10 @@ game_init :: proc() {
 	g.render_texture = rl.LoadRenderTexture(1280, 720)
 
 	g.crabby_texture = rl.LoadTexture("assets/crab-still.png")
+	g.key_texture = rl.LoadTexture("assets/key.png")
+	g.lock_texture = rl.LoadTexture("assets/lock.png")
+	g.flag_texture = rl.LoadTexture("assets/flag.png")
+	g.coon_texture = rl.LoadTexture("assets/coon.png")
 
 	tilemap := init_tilemap_by_specifying_chunks(3, 2)
 
