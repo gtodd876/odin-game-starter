@@ -55,6 +55,9 @@ Moving_State :: enum {
 Tile_Type :: enum {
 	Trail,
 	Solid,
+	Key,
+	Lock,
+	Whatever,
 }
 
 tile_size :: 64
@@ -73,7 +76,7 @@ max_tiles :: tiles_in_chunk*max_chunks
 
 
 Tilemap :: struct {
-	tiles : [max_tiles]int,
+	tiles : [max_tiles]Tile_Type,
 	width : int,
 	height : int,
 	num_chunks_x : int,
@@ -83,6 +86,11 @@ Tilemap :: struct {
 Crab_Pos :: struct {
 	chunk:   [2]int,   // which chunk the crab is in
 	rel_pos: [2]f32,   // chunk-local position in tile units, [0, chunk_width) x [0, chunk_height). tile N center at rel_pos = N + 0.5.
+}
+
+Tilemap_Tile_Pos :: struct {
+	chunk : [2]int,
+	tile : [2]int,
 }
 
 
@@ -119,6 +127,7 @@ Game_State :: struct {
 	camera_zoom : f32,
 	camera_target : [2]f32,
 	crab: Crab_Pos,
+	num_keys_crab_has : int,
 }
 
 level_cap :: 32 // just add more if there ends up being more
@@ -139,6 +148,7 @@ Game_Memory :: struct {
 	levels : [level_cap]Tilemap,
 	run: bool,
 	debug: Debug_State,
+	editor_selected_tile_type : Tile_Type,
 	crabby_texture: rl.Texture2D,
 	coon_texture: rl.Texture2D,
 	key_texture: rl.Texture2D,
@@ -254,6 +264,9 @@ game_init :: proc() {
 	g.levels[5] = init_tilemap_by_specifying_chunks(5, 5)
 	g.levels[6] = init_tilemap_by_specifying_chunks(4, 4)
 	g.levels[7] = init_tilemap_by_specifying_chunks(4, 4)
+	g.levels[8] = init_tilemap_by_specifying_chunks(4, 4)
+	g.levels[9] = init_tilemap_by_specifying_chunks(4, 4)
+
 
 	g.sfx_bank["smack"] = rl.LoadSound("assets/billiard-pool-hit.wav")
 	g.sfx_bank["angel-choir"] = rl.LoadSound("assets/angel-choir.wav")

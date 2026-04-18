@@ -54,7 +54,7 @@ tilemap_is_coord_in_bounds :: proc(tilemap : ^Tilemap, x, y : int) -> bool {
 	return in_bounds
 }
 
-tilemap_set_tile :: proc(tilemap : ^Tilemap, x, y, val : int) {
+tilemap_set_tile :: proc(tilemap : ^Tilemap, x, y : int, val : Tile_Type) {
 	in_bounds := tilemap_is_coord_in_bounds(tilemap, x, y)
 
 	if in_bounds {
@@ -67,9 +67,9 @@ tilemap_set_tile :: proc(tilemap : ^Tilemap, x, y, val : int) {
 	}
 }
 
-tilemap_get_tile_val ::proc(tilemap :^Tilemap, x, y : int) -> int {
+tilemap_get_tile_val ::proc(tilemap :^Tilemap, x, y : int) -> Tile_Type {
 	in_bounds := tilemap_is_coord_in_bounds(tilemap, x, y)
-	val := 0
+	val := Tile_Type.Trail
 	if in_bounds {
 		val = tilemap.tiles[(y*tilemap.width)+x]
 	} else {
@@ -77,7 +77,7 @@ tilemap_get_tile_val ::proc(tilemap :^Tilemap, x, y : int) -> int {
 	return val
 }
 
-set_chunk_tiles_in_tilemap :: proc(tilemap : ^Tilemap, chunk_x, chunk_y : int, tiles:[]int) {
+set_chunk_tiles_in_tilemap :: proc(tilemap : ^Tilemap, chunk_x, chunk_y : int, tiles:[]Tile_Type) {
 	min_tile_x := chunk_x * chunk_width
 	min_tile_y := chunk_y * chunk_height
 	max_tile_x := min_tile_x + chunk_width
@@ -102,8 +102,8 @@ init_tilemap_by_specifying_chunks :: proc(num_chunks_x, num_chunks_y : int) -> T
 	return tilemap
 }
 
-tilemap_get_chunk_tiles ::proc(tilemap : ^Tilemap, chunk_x, chunk_y : int) -> [tiles_in_chunk]int {
-	tilemap_chunk := [tiles_in_chunk]int{}
+tilemap_get_chunk_tiles ::proc(tilemap : ^Tilemap, chunk_x, chunk_y : int) -> [tiles_in_chunk]Tile_Type {
+	tilemap_chunk := [tiles_in_chunk]Tile_Type{}
 	min_tile_x := chunk_x * chunk_width
 	min_tile_y := chunk_y * chunk_height
 	max_tile_x := min_tile_x + chunk_width
@@ -156,7 +156,8 @@ tile_center_world :: proc(t: ^Tilemap, tx, ty: int) -> [2]f32 {
 
 tilemap_is_walkable :: proc(t: ^Tilemap, tx, ty: int) -> bool {
 	if tx < 0 || tx >= t.width || ty < 0 || ty >= t.height do return false
-	return Tile_Type(t.tiles[ty*t.width + tx]) == .Trail
+	return Tile_Type(t.tiles[ty*t.width + tx]) != .Solid &&
+		Tile_Type(t.tiles[ty*t.width + tx]) != .Lock
 }
 
 direction_vector :: proc(d: Direction) -> [2]int {
@@ -330,6 +331,8 @@ update_crab :: proc() {
 			gs.crab.chunk = saved_chunk
 		}
 	}
+
+
 }
 
 update :: proc() {
@@ -386,6 +389,13 @@ update :: proc() {
 		}
 	}
 
+	{ // cycle thru selected tile type
+		tile_type_switch_key := rl.KeyboardKey.M
+		if rl.IsKeyPressed(tile_type_switch_key) {
+			g.editor_selected_tile_type = Tile_Type((int(g.editor_selected_tile_type)+1)%%len(Tile_Type)) 
+		}
+	}
+
 	load_button := rl.KeyboardKey.F11
 	if rl.IsKeyPressed(load_button) {
 		t_load_data(context.temp_allocator)
@@ -400,9 +410,9 @@ update :: proc() {
 		tile_x := int(mouse_rel_tilemap.x) / tile_size
 		tile_y := int(mouse_rel_tilemap.y) / tile_size	
 		if (rl.IsMouseButtonDown(.LEFT)) {
-			tilemap_set_tile(tilemap, tile_x, tile_y, 1)
+			tilemap_set_tile(tilemap, tile_x, tile_y, g.editor_selected_tile_type)
 		} else if rl.IsMouseButtonDown(.RIGHT) {
-			tilemap_set_tile(tilemap, tile_x, tile_y, 0)	
+			tilemap_set_tile(tilemap, tile_x, tile_y, .Trail)	
 		}
 	}
 
@@ -499,9 +509,51 @@ update :: proc() {
 
 	update_crab()
 
+	{ // crab get key
+		crab_tile := crab_absolute_tile(g.gs.crab)
+		tile_type_that_crab_on := tilemap_get_tile_val(&g.gs.tilemap, 
+			crab_tile.x, crab_tile.y)
+		crab_on_a_key := tile_type_that_crab_on == .Key
+		if crab_on_a_key {
+			tilemap_set_tile(&g.gs.tilemap, crab_tile.x, crab_tile.y, .Trail)
+			g.gs.num_keys_crab_has+=1
+		}
+	}
+
+	{ // crab make lock go away
+		crab_next_tile := crab_absolute_tile(g.gs.crab)
+		switch g.gs.current_direction {
+			case .Up: {
+				crab_next_tile.y -= 1
+			}
+			case .Down: {
+				crab_next_tile.y += 1
+			}
+			case .Left: {
+				crab_next_tile.x -= 1
+			}
+			case .Right: {
+				crab_next_tile.x += 1
+			}
+			case .None : {}
+		}
+
+		tile_type_that_next_tile_is := tilemap_get_tile_val(&g.gs.tilemap,
+			crab_next_tile.x, crab_next_tile.y)
+
+		can_crab_open_lock := tile_type_that_next_tile_is == .Lock &&
+			g.gs.num_keys_crab_has > 0
+
+		if can_crab_open_lock {
+			tilemap_set_tile(&g.gs.tilemap, crab_next_tile.x, crab_next_tile.y, .Trail)
+			g.gs.num_keys_crab_has-=1
+
+		}
+	}
+
 
 	rl.BeginTextureMode(g.render_texture)
-	rl.ClearBackground(PALETTE_1)
+	rl.ClearBackground(PALETTE_3)
 
 	rl.BeginMode2D(game_camera())
 
@@ -528,37 +580,89 @@ update :: proc() {
 				for tile_y in 0..<chunk_height {
 					i := tile_y*chunk_width + tile_x
 					tile_type := tilemap_chunk[i]
-					color := Tile_Type(tile_type) == .Solid ? PALETTE_4 : PALETTE_1
-					rect := rl.Rectangle {
-						chunk_pos.x + (tile_size*f32(tile_x)),
-						chunk_pos.y + (tile_size*f32(tile_y)),
-						tile_size,
-						tile_size,
+					switch tile_type {
+						case .Solid: {
+							rect := rl.Rectangle {
+								chunk_pos.x + (tile_size*f32(tile_x)),
+								chunk_pos.y + (tile_size*f32(tile_y)),
+								tile_size,
+								tile_size,
+							}
+							rl.DrawRectangleRec(rect, PALETTE_4)
+						}
+						case .Trail: {
+							rect := rl.Rectangle {
+								chunk_pos.x + (tile_size*f32(tile_x)),
+								chunk_pos.y + (tile_size*f32(tile_y)),
+								tile_size,
+								tile_size,
+							}
+							rl.DrawRectangleRec(rect, PALETTE_1)
+						}
+						case .Key:{
+							rect := rl.Rectangle {
+								chunk_pos.x + (tile_size*f32(tile_x)),
+								chunk_pos.y + (tile_size*f32(tile_y)),
+								tile_size,
+								tile_size,
+							}
+							rl.DrawRectangleRec(rect, PALETTE_1)
+							wpos := [2]f32 {
+								chunk_pos.x + (tile_size*f32(tile_x)),
+								chunk_pos.y + (tile_size*f32(tile_y)),
+							}
+							rl.DrawTextureV(g.key_texture, wpos, rl.WHITE)
+						}
+						case .Lock: {
+							rect := rl.Rectangle {
+								chunk_pos.x + (tile_size*f32(tile_x)),
+								chunk_pos.y + (tile_size*f32(tile_y)),
+								tile_size,
+								tile_size,
+							}
+							rl.DrawRectangleRec(rect, PALETTE_1)
+							wpos := [2]f32 {
+								chunk_pos.x + (tile_size*f32(tile_x)),
+								chunk_pos.y + (tile_size*f32(tile_y)),
+							}
+							rl.DrawTextureV(g.lock_texture, wpos, rl.WHITE)
+						}
+						case .Whatever: {
+							rect := rl.Rectangle {
+								chunk_pos.x + (tile_size*f32(tile_x)),
+								chunk_pos.y + (tile_size*f32(tile_y)),
+								tile_size,
+								tile_size,
+							}
+							rl.DrawRectangleRec(rect, rl.WHITE)
+						}
 					}
-					rl.DrawRectangleRec(rect, color)
 				}
 			}
 
 			chunk_rect := rl.Rectangle {
 				chunk_pos.x, chunk_pos.y, chunk_width_in_units, chunk_height_in_units
 			}
-			color := rl.YELLOW
-			color.a = g.gs.is_rearranging_chunks ? 10 : 10
+			color := PALETTE_3
+			color.a = 20
 			rl.DrawRectangleLinesEx(chunk_rect, 4, color)
 			// Note(john) using term chunk id to refer to the 2D index
 			// which can really be thought of as an integer coordinate
 			// system
 			if g.gs.is_rearranging_chunks {
 				chunk_id := [2]int{chunk_x, chunk_y}
+					color := rl.BLACK
+
 				if chunk_id == g.gs.hovered_chunk {
 					color.a = 255
+					rl.DrawRectangleLinesEx(chunk_rect, 20, color)
 				} else if g.gs.is_chunk_selection_active {
 					if chunk_id == g.gs.selected_chunk  {
-						color = rl.WHITE
+						color = rl.GRAY
+						rl.DrawRectangleLinesEx(chunk_rect, 20, color)
 					}
 				}
 
-				rl.DrawRectangleLinesEx(chunk_rect, 4, color)
 			}
 		}
 	}
@@ -572,6 +676,14 @@ update :: proc() {
 		dst := rl.Rectangle{g.gs.player_pos.x, g.gs.player_pos.y, tile_size_f, tile_size_f}
 		origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
 		rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
+
+		for key_index in 0..<g.gs.num_keys_crab_has {
+			crab_wpos := crab_world_pos(&g.gs.tilemap, g.gs.crab)
+			space_from_crab := [2]f32{-16, -64}
+			space_from_last_key := [2]f32{10,-10}
+			key_wpos := crab_wpos + space_from_crab + (f32(key_index)*space_from_last_key)
+			rl.DrawTextureV(g.key_texture, key_wpos, rl.WHITE)
+		}
 	}
 
 	if g.debug.debug_draw {
