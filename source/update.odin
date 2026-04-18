@@ -37,7 +37,9 @@ game_update :: proc() {
 
 	g.old_input_state = g.input_state
 
-
+	// if rl.IsKeyPressed(.F12) {
+	// 	intrinsics.debug_trap()
+	// }
 	update()
 
 
@@ -264,7 +266,7 @@ update :: proc() {
 		g.run = false
 	}
 
-	save_button := rl.KeyboardKey.F12
+	save_button := rl.KeyboardKey.F10
 	if rl.IsKeyPressed(save_button) {
 		s : Serializer
 		serializer_init_writer(&s, allocator = context.temp_allocator)
@@ -292,9 +294,13 @@ update :: proc() {
 			rl.KeyboardKey.NINE,
 		}
 
+		// save the active one to the levels
+		g.levels[g.gs.current_level] = g.gs.tilemap
+
 		for level_key, i in level_keys {
 			if rl.IsKeyPressed(level_key) {
 				g.gs.tilemap = g.levels[i]
+				g.gs.current_level = i
 			}
 		}
 	}
@@ -318,6 +324,25 @@ update :: proc() {
 				 tilemap_set_tile(tilemap, tile_x, tile_y, 0)
 			} else if tile_val == 0 {
 				 tilemap_set_tile(tilemap, tile_x, tile_y, 1)
+			}
+		}
+	}
+
+	{
+		enter_rearrange_mode_key := rl.KeyboardKey.Z
+		if IsKeyPressed(enter_rearrange_mode_key) {
+			g.gs.is_rearranging_chunks = !g.gs.is_rearranging_chunks 
+			g.gs.zoom_timer = zoom_timer_duration_sec
+		}
+
+		if g.gs.zoom_timer > 0 {
+			g.gs.zoom_timer -= rl.GetFrameTime()
+			if g.gs.zoom_timer < 0 do g.gs.zoom_timer = 0
+			p := 1.0 - ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))
+			if g.gs.is_rearranging_chunks {
+				g.gs.camera_zoom = rl.Lerp(1.0, camera_zoom_rearrange_mode, p)
+			} else {
+				g.gs.camera_zoom = rl.Lerp(camera_zoom_rearrange_mode, 1.0, p)
 			}
 		}
 	}
@@ -463,7 +488,7 @@ update :: proc() {
 		dst := rl.Rectangle{(screen_width - window_scaled_width)/2, (screen_height - window_scaled_height)/2, window_scaled_width, window_scaled_height}
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
 
-		draw_debug_overlay()
+		// draw_debug_overlay()
 
 	}
 }

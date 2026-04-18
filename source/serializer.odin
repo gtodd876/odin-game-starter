@@ -30,7 +30,6 @@ SERIALIZER_ENABLE_GENERIC :: #config(SERIALIZER_ENABLE_GENERIC, true)
 // WARNING: do not change the order of these!
 Serializer_Version :: enum u32le {
     initial = 0,
-    add_foo_to_tilemap = 1,
     LATEST_PLUS_ONE,
 }
 

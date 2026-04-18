@@ -89,6 +89,9 @@ Debug_State :: struct {
 }
 
 
+zoom_timer_duration_sec : f32 = 0.25
+camera_zoom_rearrange_mode : f32 = 0.5
+
 
 // Doesn't contain any "meta" state like
 // inputs and debug state
@@ -97,12 +100,16 @@ Game_State :: struct {
 	hovered_chunk : [2]int,
 	is_chunk_selection_active : bool,
 	selected_chunk : [2]int,
+	current_level : int,
 	tilemap : Tilemap,
 	move_state: Moving_State,
 	move_speed: f32,
 	current_direction: Direction,
 	queued_direction: Direction,
-	player_tile: [2]int
+	player_tile: [2]int,
+	is_rearranging_chunks : bool,
+	zoom_timer : f32,
+	camera_zoom : f32,
 }
 
 level_cap :: 32 // just add more if there ends up being more
@@ -130,7 +137,7 @@ game_camera :: proc() -> rl.Camera2D {
 	h := f32(g.render_texture.texture.height)
 
 	return {
-		zoom = 1.0,
+		zoom = g.gs.camera_zoom,
 		// Fixed camera anchored at world origin so the player visibly moves on
 		// screen. Change `target` to `g.gs.player_pos` for a follow-cam.
 		target = {0, 0},
@@ -199,6 +206,7 @@ game_init :: proc() {
 	g.gs.queued_direction  = .None
 	g.gs.move_state        = .Idle
 	g.gs.move_speed        = 4.0 // tiles per second
+	g.gs.camera_zoom = 1.0
 
 	spawn: for ty in 0..<g.gs.tilemap.height {
 		for tx in 0..<g.gs.tilemap.width {
@@ -209,6 +217,15 @@ game_init :: proc() {
 			}
 		}
 	}
+
+	g.levels[1] = init_tilemap_by_specifying_chunks(4, 4)
+	g.levels[2] = init_tilemap_by_specifying_chunks(2, 1)
+	g.levels[3] = init_tilemap_by_specifying_chunks(3, 3)
+	g.levels[4] = init_tilemap_by_specifying_chunks(2, 2)
+	g.levels[5] = init_tilemap_by_specifying_chunks(5, 5)
+	g.levels[6] = init_tilemap_by_specifying_chunks(4, 4)
+	g.levels[7] = init_tilemap_by_specifying_chunks(4, 4)
+
 
 	game_hot_reloaded(g)
 }
