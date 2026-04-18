@@ -147,7 +147,9 @@ Game_Memory :: struct {
 	key_texture: rl.Texture2D,
 	lock_texture: rl.Texture2D,
 	flag_texture: rl.Texture2D,
-	lcd_font: rl.Font
+	lcd_font: rl.Font,
+	dmg_shader: rl.Shader,
+	dmg_enabled: bool,
 }
 
 g: ^Game_Memory
@@ -175,7 +177,7 @@ game_camera :: proc() -> rl.Camera2D {
 draw_debug_overlay :: proc() {
 	if !g.debug.show_overlay do return
 
-	panel := rl.Rectangle{8, 140, 280, 330}
+	panel := rl.Rectangle{8, 140, 280, 362}
 	rl.GuiPanel(panel, "debug  [F3 hide  F4 pause]")
 
 	px := panel.x
@@ -231,6 +233,8 @@ draw_debug_overlay :: proc() {
 			swap_to_level(i)
 		}
 	}
+
+	rl.GuiCheckBox({px+8, py+250, 16, 16}, "DMG shader", &g.dmg_enabled)
 }
 
 
@@ -265,6 +269,27 @@ game_init :: proc() {
 
 	g.lcd_font = rl.LoadFontEx("assets/fonts/LCD2B.TTF", 72, nil, 0)
 	rl.SetTextureFilter(g.lcd_font.texture, .POINT)
+
+	g.dmg_shader = rl.LoadShader(nil, "assets/shaders/gameboy_dmg.fs")
+	g.dmg_enabled = true
+	{
+		grid_size     : f32 = 4
+		grid_strength : f32 = 0.35
+		palette_as_vec4 :: proc(c: rl.Color) -> rl.Vector4 {
+			return {f32(c.r)/255.0, f32(c.g)/255.0, f32(c.b)/255.0, f32(c.a)/255.0}
+		}
+		p0 := palette_as_vec4(PALETTE_1)
+		p1 := palette_as_vec4(PALETTE_2)
+		p2 := palette_as_vec4(PALETTE_3)
+		p3 := palette_as_vec4(PALETTE_4)
+
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "gridSize"),     &grid_size,     .FLOAT)
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "gridStrength"), &grid_strength, .FLOAT)
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "palette0"), &p0, .VEC4)
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "palette1"), &p1, .VEC4)
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "palette2"), &p2, .VEC4)
+		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "palette3"), &p3, .VEC4)
+	}
 
 	tilemap := init_tilemap_by_specifying_chunks(3, 2)
 
@@ -327,6 +352,7 @@ game_should_run :: proc() -> bool {
 @(export)
 game_shutdown :: proc() {
 	rl.UnloadFont(g.lcd_font)
+	rl.UnloadShader(g.dmg_shader)
 	rl.UnloadTexture(g.crabby_texture)
 	free(g)
 }

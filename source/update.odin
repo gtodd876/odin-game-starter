@@ -624,7 +624,9 @@ update :: proc() {
 			window_scaled_width,
 			window_scaled_height,
 		}
+		if g.dmg_enabled do rl.BeginShaderMode(g.dmg_shader)
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
+		if g.dmg_enabled do rl.EndShaderMode()
 
 		hud_rect := rl.Rectangle{ 8, 8, screen_width / 6, 120 }
 		rl.DrawRectangleRounded       (hud_rect, 0.15, 8,    PALETTE_1)
