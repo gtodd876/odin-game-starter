@@ -5,6 +5,7 @@ package game
 // and anything else in the other pane at the same time
 
 import rl "vendor:raylib"
+import "base:intrinsics"
 
 @(export)
 game_update :: proc() {
@@ -40,56 +41,103 @@ game_update :: proc() {
 	free_all(context.temp_allocator)
 }
 
+tilemap_put_tile :: proc(tilemap : ^Tilemap, x, y, val : int) {
+	in_bounds := x >= 0 && x < tilemap.width &&
+		y >= 0 && y < tilemap.height
+	if in_bounds {
+		tilemap.tiles[(y*tilemap.width)+x] = val
+	} else {
+		// Why are u here?
+		when ODIN_DEBUG {
+			intrinsics.debug_trap()
+		}
+	}
+}
+
+put_chunk_into_tilemap :: proc(tilemap : ^Tilemap, chunk_x, chunk_y : int, tiles:[]int) {
+	min_tile_x := chunk_x * chunk_width
+	min_tile_y := chunk_y * chunk_height
+	max_tile_x := min_tile_x + chunk_width
+	max_tile_y := min_tile_y + chunk_height
+
+	for tile_x, i_x in min_tile_x..<max_tile_x {
+		for tile_y, i_y in min_tile_y..<max_tile_y {
+			tile_val := tiles[(i_y*chunk_width)+i_x]
+			tilemap_put_tile(tilemap, tile_x, tile_y, tile_val)
+		}
+	} 
+
+}
+
+init_tilemap_by_specifying_chunks :: proc(num_chunks_x, num_chunks_y : int) -> Tilemap {
+	tilemap := Tilemap {
+		width = num_chunks_x * chunk_width,
+		height = num_chunks_y * chunk_height,
+		num_chunks_x = num_chunks_x,
+		num_chunks_y = num_chunks_y
+	}
+	return tilemap
+}
+
+tilemap_get_chunk_tiles ::proc(tilemap : ^Tilemap, chunk_x, chunk_y : int) -> [tiles_in_chunk]int {
+	tilemap_chunk := [tiles_in_chunk]int{}
+	min_tile_x := chunk_x * chunk_width
+	min_tile_y := chunk_y * chunk_height
+	max_tile_x := min_tile_x + chunk_width
+	max_tile_y := min_tile_y + chunk_height
+
+	for tile_x, i_x in min_tile_x..<max_tile_x {
+		for tile_y, i_y in min_tile_y..<max_tile_y {
+			tile_val := tilemap.tiles[(i_y*chunk_width)+i_x]
+			tilemap_chunk[(i_y*chunk_width)+i_x] = tile_val
+		}
+	}
+	return tilemap_chunk
+}
 
 update :: proc() {
 
 	// NOTE(john): these are ints in here only because its easy to write in code
 	// These are planned to be enum values once
 	//... if we have an actual editor where we are placing these things
-	tilemap_chunk00 := Tilemap_Chunk{
-		tiles = {
+
+	tilemap := init_tilemap_by_specifying_chunks(2, 2)
+	tilemap_chunk00 := [?]int{
 			1,1,1,1,1,
 			1,0,0,0,0,
 			1,0,1,1,1,
 			1,0,1,1,1,
 			1,0,1,1,1,
-		}
+		
 	}
-	tilemap_chunk01 := Tilemap_Chunk{
-		tiles = {
+	tilemap_chunk01 := [?]int{
 			1,0,1,1,1,
 			1,0,1,1,1,
 			1,0,0,0,0,
 			1,0,1,1,1,
 			1,0,1,1,1,
-		}
+		
 	}
-	tilemap_chunk02 := Tilemap_Chunk{
-		tiles = {
+	tilemap_chunk02 := [?]int{
 			1,1,1,1,1,
 			1,1,1,1,1,
 			0,0,0,0,0,
 			1,1,1,1,1,
 			1,1,1,1,1,
-		}
+		
 	}
-	tilemap_chunk03 := Tilemap_Chunk{
-		tiles = {
+	tilemap_chunk03 := [?]int{
 			1,1,1,1,1,
 			1,0,1,1,1,
 			0,0,1,1,1,
 			1,0,1,1,1,
 			1,0,1,1,1,
-		}
 	}
 
-	chunk_arrangement := Chunk_Arrangement {}
-	chunk_arrangement.chunks[0] = tilemap_chunk00
-	chunk_arrangement.chunks[1] = tilemap_chunk01
-	chunk_arrangement.chunks[2] = tilemap_chunk02
-	chunk_arrangement.chunks[3] = tilemap_chunk03
-	chunk_arrangement.width = 2
-	chunk_arrangement.height = 2
+	put_chunk_into_tilemap(&tilemap, 0, 0, tilemap_chunk00[:])
+	put_chunk_into_tilemap(&tilemap, 0, 1, tilemap_chunk01[:])
+	put_chunk_into_tilemap(&tilemap, 1, 0, tilemap_chunk02[:])
+	put_chunk_into_tilemap(&tilemap, 1, 1, tilemap_chunk03[:])
 
 
 
@@ -121,8 +169,8 @@ update :: proc() {
 
 	// NOTE(john) make sure selection stays within the bounds
 	// of the overall chunk arrangemetn
-	g.gs.hovered_chunk.x %%= chunk_arrangement.width
-	g.gs.hovered_chunk.y %%= chunk_arrangement.height
+	g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
+	g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
 
 
 
@@ -139,8 +187,9 @@ update :: proc() {
 	arrangement_pos := [2]f32{-1280/2,-720/2}
 
 
-	for chunk_x in 0..<chunk_arrangement.width {
-		for chunk_y in 0..<chunk_arrangement.height {
+	for chunk_x in 0..<tilemap.num_chunks_x {
+		for chunk_y in 0..<tilemap.num_chunks_y {
+			tilemap_chunk := tilemap_get_chunk_tiles(&tilemap, chunk_x, chunk_y)
 			chunk_pos := [2]f32{
 				arrangement_pos.x + (tile_size_f*chunk_width_f*f32(chunk_x)),
 				arrangement_pos.y + (tile_size_f*chunk_width_f*f32(chunk_y)),
@@ -153,12 +202,12 @@ update :: proc() {
 			chunk_width_in_units := tile_size_f*chunk_width_f
 			chunk_height_in_units := tile_size_f*chunk_width_f
 
-			tilemap_chunk := chunk_arrangement.chunks[(chunk_y*chunk_arrangement.width)+(chunk_x)]
+			// tilemap_chunk := chunk_arrangement.chunks[(chunk_y*chunk_arrangement.width)+(chunk_x)]
 
 			for tile_x in 0..<chunk_width {
 				for tile_y in 0..<chunk_height {
 					i := tile_y*chunk_width + tile_x
-					tile_type := tilemap_chunk.tiles[i]
+					tile_type := tilemap_chunk[i]
 					color := Tile_Type(tile_type) == .Solid ? rl.BLACK : rl.WHITE
 					rect := rl.Rectangle {
 						chunk_pos.x + (tile_size*f32(tile_x)),

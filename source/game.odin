@@ -54,16 +54,21 @@ Tilemap_Chunk :: struct {
 	tiles : [tiles_in_chunk]int,
 }
 
-max_chunks_in_arrangement :: 10
+max_chunks :: 10
+max_tiles :: tiles_in_chunk*max_chunks
 
 Chunk_Arrangement :: struct {
-	chunks : [max_chunks_in_arrangement]Tilemap_Chunk,
+	chunks : [max_chunks]Tilemap_Chunk,
 	width : int,
 	height : int,
 }
 
 Tilemap :: struct {
-	
+	tiles : [max_tiles]int,
+	width : int,
+	height : int,
+	num_chunks_x : int,
+	num_chunks_y : int,
 }
 
 
