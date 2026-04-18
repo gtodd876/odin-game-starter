@@ -18,7 +18,7 @@ game_update :: proc() {
 			begin_input_playback(&g.irs, &g.gs)
 			g.irs.playback_frame = 0
 		} else if !g.irs.is_recording && !g.irs.is_playback {
-			begin_recording_input(&g.irs, &g.gs)			
+			begin_recording_input(&g.irs, &g.gs)
 		}
 	}
 
@@ -31,10 +31,10 @@ game_update :: proc() {
 	}
 
 	g.old_input_state = g.input_state
-	
+
 
 	update()
-	
+
 
 	// Everything on tracking allocator is valid until end-of-frame.
 	free_all(context.temp_allocator)
@@ -130,7 +130,7 @@ update :: proc() {
 
 
 	rl.BeginTextureMode(g.render_texture)
-	rl.ClearBackground(rl.BLUE)
+	rl.ClearBackground(PALETTE_1)
 
 	rl.BeginMode2D(game_camera())
 
@@ -146,7 +146,7 @@ update :: proc() {
 				arrangement_pos.y + (tile_size_f*chunk_width_f*f32(chunk_y)),
 			}
 
-			// NOTE(johnb) units means pixels. Using the term units, cause 
+			// NOTE(johnb) units means pixels. Using the term units, cause
 			// when camera
 			// zooms out or in, suddenly its no longer measured in pixels,
 			// so it made sense to me. But im fine with whatever terms
@@ -159,7 +159,7 @@ update :: proc() {
 				for tile_y in 0..<chunk_height {
 					i := tile_y*chunk_width + tile_x
 					tile_type := tilemap_chunk.tiles[i]
-					color := Tile_Type(tile_type) == .Solid ? rl.BLACK : rl.WHITE
+					color := Tile_Type(tile_type) == .Solid ? PALETTE_4 : PALETTE_1
 					rect := rl.Rectangle {
 						chunk_pos.x + (tile_size*f32(tile_x)),
 						chunk_pos.y + (tile_size*f32(tile_y)),
@@ -167,17 +167,17 @@ update :: proc() {
 						tile_size,
 					}
 					rl.DrawRectangleRec(rect, color)
-				} 
+				}
 			}
 
 			chunk_rect := rl.Rectangle {
-				chunk_pos.x, chunk_pos.y, chunk_width_in_units, chunk_height_in_units 
+				chunk_pos.x, chunk_pos.y, chunk_width_in_units, chunk_height_in_units
 			}
 			t_yellow := rl.YELLOW
 			t_yellow.a = 100
 
 			// Note(john) using term chunk id to refer to the 2D index
-			// which can really be thought of as an integer coordinate 
+			// which can really be thought of as an integer coordinate
 			// system
 			chunk_id := [2]int{chunk_x, chunk_y}
 			if chunk_id == g.gs.hovered_chunk {
@@ -205,7 +205,7 @@ update :: proc() {
 	// main_release.odin / main_web_entry.odin.
 
 	rl.EndTextureMode()
-	
+
 
 	{ // DRAW TO WINDOW
 		rl.BeginDrawing()
@@ -221,7 +221,7 @@ update :: proc() {
 		scale := min(screen_width/f32(g.render_texture.texture.width), screen_height/f32(g.render_texture.texture.height))
 
 		src := rl.Rectangle{ 0, 0, f32(g.render_texture.texture.width), f32(-g.render_texture.texture.height) }
-		
+
 		window_midpoint_x    := screen_width -  (f32(g.render_texture.texture.width)   * scale) / 2
 		window_midpoint_y    := screen_height - (f32(g.render_texture.texture.height)  * scale) / 2
 		window_scaled_width  := f32(g.render_texture.texture.width)  * scale
@@ -229,7 +229,7 @@ update :: proc() {
 
 		dst := rl.Rectangle{(screen_width - window_scaled_width)/2, (screen_height - window_scaled_height)/2, window_scaled_width, window_scaled_height}
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
-		
+
 		draw_debug_overlay()
 
 	}
