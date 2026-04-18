@@ -8,6 +8,7 @@ import rl "vendor:raylib"
 import "base:intrinsics"
 import "base:runtime"
 import "core:fmt"
+import "core:math"
 import "core:os"
 
 
@@ -178,9 +179,61 @@ opposite_direction :: proc(d: Direction) -> Direction {
 	return .None
 }
 
+chunk_world_origin :: proc(t: ^Tilemap, chunk_x, chunk_y: int) -> [2]f32 {
+	o := tilemap_world_origin(t)
+	return {
+		o.x + f32(chunk_x) * chunk_width_f  * tile_size_f,
+		o.y + f32(chunk_y) * chunk_height_f * tile_size_f,
+	}
+}
+
+crab_world_pos :: proc(t: ^Tilemap, cp: Crab_Pos) -> [2]f32 {
+	co := chunk_world_origin(t, cp.chunk.x, cp.chunk.y)
+	return {
+		co.x + cp.rel_pos.x * tile_size_f,
+		co.y + cp.rel_pos.y * tile_size_f,
+	}
+}
+
+crab_absolute_tile :: proc(cp: Crab_Pos) -> [2]int {
+	return {
+		cp.chunk.x * chunk_width  + int(cp.rel_pos.x),
+		cp.chunk.y * chunk_height + int(cp.rel_pos.y),
+	}
+}
+
+// Wrap rel_pos into [0, chunk_w) x [0, chunk_h), shifting chunk to compensate.
+crab_normalize_chunk :: proc(cp: ^Crab_Pos) {
+	for cp.rel_pos.x >= chunk_width_f  { cp.chunk.x += 1; cp.rel_pos.x -= chunk_width_f  }
+	for cp.rel_pos.x < 0               { cp.chunk.x -= 1; cp.rel_pos.x += chunk_width_f  }
+	for cp.rel_pos.y >= chunk_height_f { cp.chunk.y += 1; cp.rel_pos.y -= chunk_height_f }
+	for cp.rel_pos.y < 0               { cp.chunk.y -= 1; cp.rel_pos.y += chunk_height_f }
+}
+
+crab_can_step :: proc(t: ^Tilemap, cp: Crab_Pos, dir: Direction) -> bool {
+	if dir == .None do return false
+	step := direction_vector(dir)
+	probe_chunk := cp.chunk
+	probe_local_x := int(cp.rel_pos.x) + step.x
+	probe_local_y := int(cp.rel_pos.y) + step.y
+	if probe_local_x < 0             { probe_chunk.x -= 1; probe_local_x += chunk_width  }
+	if probe_local_x >= chunk_width  { probe_chunk.x += 1; probe_local_x -= chunk_width  }
+	if probe_local_y < 0             { probe_chunk.y -= 1; probe_local_y += chunk_height }
+	if probe_local_y >= chunk_height { probe_chunk.y += 1; probe_local_y -= chunk_height }
+	abs_x := probe_chunk.x * chunk_width  + probe_local_x
+	abs_y := probe_chunk.y * chunk_height + probe_local_y
+	return tilemap_is_walkable(t, abs_x, abs_y)
+}
+
 update_crab :: proc() {
 	gs := &g.gs
 	t  := &gs.tilemap
+
+	// Refresh derived state on the way out: wrap rel_pos/chunk, then world pos.
+	defer {
+		crab_normalize_chunk(&gs.crab)
+		gs.player_pos = crab_world_pos(t, gs.crab)
+	}
 
 	// 1. Latest WASD press sets queued direction.
 	if      IsKeyPressed(.W) do gs.queued_direction = .Up
@@ -196,11 +249,9 @@ update_crab :: proc() {
 		gs.queued_direction = .None
 	}
 
-	// 3. Kick off from idle when queued leads into a walkable tile.
+	// 3. Kick off from idle when queued leads into a walkable neighbor.
 	if gs.move_state == .Idle && gs.queued_direction != .None {
-		step := direction_vector(gs.queued_direction)
-		next := [2]int{gs.player_tile.x + step.x, gs.player_tile.y + step.y}
-		if tilemap_is_walkable(t, next.x, next.y) {
+		if crab_can_step(t, gs.crab, gs.queued_direction) {
 			gs.current_direction = gs.queued_direction
 			gs.move_state = .Moving
 		}
@@ -209,42 +260,65 @@ update_crab :: proc() {
 
 	if gs.move_state != .Moving do return
 
-	// 4. Advance along current direction.
+	// 4. Advance rel_pos (tile units; move_speed is tiles/second).
 	dv := direction_vector(gs.current_direction)
 	dv_f := [2]f32{f32(dv.x), f32(dv.y)}
-	speed_px := gs.move_speed * tile_size_f
-	gs.player_pos += dv_f * speed_px * rl.GetFrameTime()
+	pre_rel := gs.crab.rel_pos
+	gs.crab.rel_pos += dv_f * gs.move_speed * rl.GetFrameTime()
 
-	// 5. Crossed into the next tile? Re-evaluate at the new tile center.
-	center := tile_center_world(t, gs.player_tile.x, gs.player_tile.y)
-	delta := gs.player_pos - center
-	axis_dist := dv_f.x*delta.x + dv_f.y*delta.y
+	// 5. Detect tile-center crossing. Tile centers sit at half-integers;
+	// shift by -0.5 so they sit at integers, and a crossing is a change in
+	// floor(rel - 0.5) along the motion axis.
+	crossed_cx := gs.crab.rel_pos.x
+	crossed_cy := gs.crab.rel_pos.y
+	crossed := false
 
-	if axis_dist >= tile_size_f {
-		gs.player_tile.x += dv.x
-		gs.player_tile.y += dv.y
-		new_center := tile_center_world(t, gs.player_tile.x, gs.player_tile.y)
-
-		turned := false
-		if gs.queued_direction != .None && gs.queued_direction != gs.current_direction {
-			step := direction_vector(gs.queued_direction)
-			next := [2]int{gs.player_tile.x + step.x, gs.player_tile.y + step.y}
-			if tilemap_is_walkable(t, next.x, next.y) {
-				gs.current_direction = gs.queued_direction
-				gs.player_pos = new_center
-				turned = true
-			}
+	if dv.x != 0 {
+		pre_u  := math.floor(pre_rel.x - 0.5)
+		post_u := math.floor(gs.crab.rel_pos.x - 0.5)
+		if pre_u != post_u {
+			crossed = true
+			u_cross := dv.x > 0 ? post_u : pre_u
+			crossed_cx = u_cross + 0.5
 		}
-		gs.queued_direction = .None
+	}
+	if dv.y != 0 {
+		pre_u  := math.floor(pre_rel.y - 0.5)
+		post_u := math.floor(gs.crab.rel_pos.y - 0.5)
+		if pre_u != post_u {
+			crossed = true
+			u_cross := dv.y > 0 ? post_u : pre_u
+			crossed_cy = u_cross + 0.5
+		}
+	}
 
-		if !turned {
-			step := direction_vector(gs.current_direction)
-			next := [2]int{gs.player_tile.x + step.x, gs.player_tile.y + step.y}
-			if !tilemap_is_walkable(t, next.x, next.y) {
-				gs.player_pos = new_center
-				gs.current_direction = .None
-				gs.move_state = .Idle
-			}
+	if !crossed do return
+
+	// Just crossed a tile center. Temporarily snap rel_pos to the crossed center
+	// so walkability probes evaluate from there; then decide turn / continue / stop.
+	saved_rel   := gs.crab.rel_pos
+	saved_chunk := gs.crab.chunk
+	gs.crab.rel_pos = {crossed_cx, crossed_cy}
+	crab_normalize_chunk(&gs.crab)
+
+	turned := false
+	if gs.queued_direction != .None && gs.queued_direction != gs.current_direction {
+		if crab_can_step(t, gs.crab, gs.queued_direction) {
+			gs.current_direction = gs.queued_direction
+			turned = true
+		}
+	}
+	gs.queued_direction = .None
+
+	if !turned {
+		if !crab_can_step(t, gs.crab, gs.current_direction) {
+			// Stop at the crossed center.
+			gs.current_direction = .None
+			gs.move_state = .Idle
+		} else {
+			// Continue straight: restore the pre-normalize overshoot.
+			gs.crab.rel_pos = saved_rel
+			gs.crab.chunk = saved_chunk
 		}
 	}
 }
@@ -336,6 +410,15 @@ update :: proc() {
 
 			set_chunk_tiles_in_tilemap(tilemap, g.gs.hovered_chunk.x, g.gs.hovered_chunk.y, selected_tiles[:])
 			set_chunk_tiles_in_tilemap(tilemap, g.gs.selected_chunk.x, g.gs.selected_chunk.y, hovered_tiles[:])
+
+			// Crab rides along with whichever chunk was swapped out from under it.
+			if g.gs.crab.chunk == g.gs.hovered_chunk {
+				g.gs.crab.chunk = g.gs.selected_chunk
+			} else if g.gs.crab.chunk == g.gs.selected_chunk {
+				g.gs.crab.chunk = g.gs.hovered_chunk
+			}
+			g.gs.player_pos = crab_world_pos(tilemap, g.gs.crab)
+
 			g.gs.is_chunk_selection_active = false
 		} else {
 			g.gs.is_chunk_selection_active = true
