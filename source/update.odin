@@ -557,12 +557,17 @@ update :: proc() {
 			// system
 			if g.gs.is_rearranging_chunks {
 				chunk_id := [2]int{chunk_x, chunk_y}
-				if chunk_id == g.gs.hovered_chunk {
+				is_selected := g.gs.is_chunk_selection_active && chunk_id == g.gs.selected_chunk
+				is_hovered  := chunk_id == g.gs.hovered_chunk
+
+				// Selected wins over hovered so the white border shows
+				// immediately on the SPACE-press frame, before the player
+				// moves the cursor off the selected chunk.
+				if is_selected {
+					color = rl.WHITE
 					color.a = 255
-				} else if g.gs.is_chunk_selection_active {
-					if chunk_id == g.gs.selected_chunk  {
-						color = rl.WHITE
-					}
+				} else if is_hovered {
+					color.a = 255
 				}
 
 				rl.DrawRectangleLinesEx(chunk_rect, 4, color)
