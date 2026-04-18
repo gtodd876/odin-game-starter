@@ -88,7 +88,7 @@ tilemap_get_chunk_tiles ::proc(tilemap : ^Tilemap, chunk_x, chunk_y : int) -> [t
 
 	for tile_x, i_x in min_tile_x..<max_tile_x {
 		for tile_y, i_y in min_tile_y..<max_tile_y {
-			tile_val := tilemap.tiles[(i_y*chunk_width)+i_x]
+			tile_val := tilemap.tiles[(tile_y*tilemap.width)+tile_x]
 			tilemap_chunk[(i_y*chunk_width)+i_x] = tile_val
 		}
 	}
@@ -104,8 +104,8 @@ update :: proc() {
 	tilemap := init_tilemap_by_specifying_chunks(2, 2)
 	tilemap_chunk00 := [?]int{
 			1,1,1,1,1,
-			1,0,0,0,0,
-			1,0,1,1,1,
+			1,0,0,0,1,
+			1,0,1,0,0,
 			1,0,1,1,1,
 			1,0,1,1,1,
 		
@@ -128,10 +128,10 @@ update :: proc() {
 	}
 	tilemap_chunk03 := [?]int{
 			1,1,1,1,1,
-			1,0,1,1,1,
+			1,1,1,1,1,
 			0,0,1,1,1,
 			1,0,1,1,1,
-			1,0,1,1,1,
+			1,1,1,1,1,
 	}
 
 	put_chunk_into_tilemap(&tilemap, 0, 0, tilemap_chunk00[:])
@@ -165,6 +165,11 @@ update :: proc() {
 	}
 	if IsKeyPressed(.RIGHT) || IsKeyPressed(.D) {
 		g.gs.hovered_chunk.x += 1
+	}
+
+	if IsKeyPressed(.SPACE) {
+		g.gs.is_chunk_selection_active = true
+		g.gs.selected_chunk = g.gs.hovered_chunk
 	}
 
 	// NOTE(john) make sure selection stays within the bounds
@@ -202,8 +207,6 @@ update :: proc() {
 			chunk_width_in_units := tile_size_f*chunk_width_f
 			chunk_height_in_units := tile_size_f*chunk_width_f
 
-			// tilemap_chunk := chunk_arrangement.chunks[(chunk_y*chunk_arrangement.width)+(chunk_x)]
-
 			for tile_x in 0..<chunk_width {
 				for tile_y in 0..<chunk_height {
 					i := tile_y*chunk_width + tile_x
@@ -222,18 +225,22 @@ update :: proc() {
 			chunk_rect := rl.Rectangle {
 				chunk_pos.x, chunk_pos.y, chunk_width_in_units, chunk_height_in_units
 			}
-			t_yellow := rl.YELLOW
-			t_yellow.a = 100
+			color := rl.YELLOW
+			color.a = 100
 
 			// Note(john) using term chunk id to refer to the 2D index
 			// which can really be thought of as an integer coordinate
 			// system
 			chunk_id := [2]int{chunk_x, chunk_y}
 			if chunk_id == g.gs.hovered_chunk {
-				t_yellow.a = 255
+				color.a = 255
+			} else if g.gs.is_chunk_selection_active {
+				if chunk_id == g.gs.selected_chunk  {
+					color = rl.WHITE
+				}
 			}
 
-			rl.DrawRectangleLinesEx(chunk_rect, 2, t_yellow)
+			rl.DrawRectangleLinesEx(chunk_rect, 4, color)
 		}
 	}
 
