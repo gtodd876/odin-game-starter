@@ -80,6 +80,11 @@ Tilemap :: struct {
 	num_chunks_y : int,
 }
 
+Crab_Pos :: struct {
+	chunk:   [2]int,   // which chunk the crab is in
+	rel_pos: [2]f32,   // chunk-local position in tile units, [0, chunk_width) x [0, chunk_height). tile N center at rel_pos = N + 0.5.
+}
+
 
 Debug_State :: struct {
 	show_overlay: bool,
@@ -96,7 +101,7 @@ camera_zoom_rearrange_mode : f32 = 0.5
 // Doesn't contain any "meta" state like
 // inputs and debug state
 Game_State :: struct {
-	player_pos: rl.Vector2,
+	player_pos: rl.Vector2,      // derived each frame from crab pos; kept here for rendering/debug
 	hovered_chunk : [2]int,
 	is_chunk_selection_active : bool,
 	selected_chunk : [2]int,
@@ -110,6 +115,7 @@ Game_State :: struct {
 	is_rearranging_chunks : bool,
 	zoom_timer : f32,
 	camera_zoom : f32,
+	crab: Crab_Pos,
 }
 
 level_cap :: 32 // just add more if there ends up being more
@@ -121,7 +127,7 @@ Game_Memory :: struct {
 	input_state : All_Input_State,
 	irs : Input_Recording_State,
 	gs : Game_State,
-	levels : [level_cap]Tilemap, 
+	levels : [level_cap]Tilemap,
 	run: bool,
 	debug: Debug_State,
 	crabby_texture: rl.Texture2D
@@ -211,8 +217,12 @@ game_init :: proc() {
 	spawn: for ty in 0..<g.gs.tilemap.height {
 		for tx in 0..<g.gs.tilemap.width {
 			if tilemap_is_walkable(&g.gs.tilemap, tx, ty) {
-				g.gs.player_tile = {tx, ty}
-				g.gs.player_pos  = tile_center_world(&g.gs.tilemap, tx, ty)
+				g.gs.crab.chunk   = {tx / chunk_width, ty / chunk_height}
+				g.gs.crab.rel_pos = {
+					f32(tx %% chunk_width)  + 0.5,
+					f32(ty %% chunk_height) + 0.5,
+				}
+				g.gs.player_pos = crab_world_pos(&g.gs.tilemap, g.gs.crab)
 				break spawn
 			}
 		}
