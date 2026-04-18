@@ -43,6 +43,11 @@ Tile_Type :: enum {
 tile_size :: 64
 chunk_width :: 5
 chunk_height :: 5
+
+tile_size_f : f32 : tile_size
+chunk_width_f : f32 : chunk_width
+chunk_height_f : f32 : chunk_height
+
 tiles_in_chunk :: chunk_width * chunk_height
 
 Tilemap_Chunk :: struct {
@@ -57,6 +62,10 @@ Chunk_Arrangement :: struct {
 	height : int,
 }
 
+Tilemap :: struct {
+	
+}
+
 
 Debug_State :: struct {
 	show_overlay: bool,
@@ -66,10 +75,14 @@ Debug_State :: struct {
 }
 
 
+
 // Doesn't contain any "meta" state like
 // inputs and debug state
 Game_State :: struct {
 	player_pos: rl.Vector2,
+	hovered_chunk : [2]int,
+	is_chunk_selection_active : bool,
+	selected_chunk : [2]int,
 }
 
 
@@ -101,113 +114,8 @@ game_camera :: proc() -> rl.Camera2D {
 	}
 }
 
-update :: proc() {
-
-	// NOTE(john): these are ints in here only because its easy to write in code
-	// These are planned to be enum values once
-	//... if we have an actual editor where we are placing these things
-	tilemap_chunk := Tilemap_Chunk{
-		tiles = {
-			1,1,1,1,1,
-			1,0,0,0,0,
-			1,0,1,1,1,
-			1,0,1,1,1,
-			1,0,1,1,1,
-		}
-	}
-
-	if rl.IsKeyPressed(.F3) do g.debug.show_overlay = !g.debug.show_overlay
-	if rl.IsKeyPressed(.F4) do g.debug.paused = !g.debug.paused
-
-	if rl.IsKeyPressed(.ESCAPE) {
-		g.run = false
-	}
-
-	if g.debug.paused do return
-
-	input: rl.Vector2
-
-	if IsKeyDown(.UP) || IsKeyDown(.W) {
-		input.y -= 1
-	}
-	if IsKeyDown(.DOWN) || IsKeyDown(.S) {
-		input.y += 1
-	}
-	if IsKeyDown(.LEFT) || IsKeyDown(.A) {
-		input.x -= 1
-	}
-	if IsKeyDown(.RIGHT) || IsKeyDown(.D) {
-		input.x += 1
-	}
-
-	input = linalg.normalize0(input)
-	g.gs.player_pos += input * rl.GetFrameTime() * g.debug.player_speed
 
 
-	rl.BeginTextureMode(g.render_texture)
-	rl.ClearBackground(rl.BLUE)
-
-	chunk_pos := [2]f32 {0, 0}
-	for x in 0..<chunk_width {
-		for y in 0..<chunk_height {
-			i := y*chunk_width + x
-			tile_type := tilemap_chunk.tiles[i]
-			color := Tile_Type(tile_type) == .Solid ? rl.BLACK : rl.WHITE
-			rect := rl.Rectangle {
-				chunk_pos.x + (tile_size*f32(x)),
-				chunk_pos.y + (tile_size*f32(y)),
-				tile_size,
-				tile_size,
-			}
-			rl.DrawRectangleRec(rect, color)
-		} 
-	}
-
-	rl.BeginMode2D(game_camera())
-	rl.DrawRectangleV(g.gs.player_pos, {16, 16}, rl.RAYWHITE)
-
-	if g.debug.debug_draw {
-		rl.DrawRectangleLinesEx({g.gs.player_pos.x, g.gs.player_pos.y, 16, 16}, 1, rl.MAGENTA)
-		rl.DrawLineV({-5, 0}, {5, 0}, rl.YELLOW)
-		rl.DrawLineV({0, -5}, {0, 5}, rl.YELLOW)
-	}
-	rl.EndMode2D()
-
-	// Debug overlay is drawn in screen space (no camera) so its controls sit
-	// on top of everything. `fmt.ctprintf` uses the temp allocator, which is
-	// freed at end-of-frame by the host in main_hot_reload.odin /
-	// main_release.odin / main_web_entry.odin.
-
-	rl.EndTextureMode()
-	
-
-	{ // DRAW TO WINDOW
-		rl.BeginDrawing()
-		defer rl.EndDrawing()
-
-		rl.ClearBackground(rl.BLACK)
-
-
-
-		screen_width := f32(rl.GetScreenWidth())
-		screen_height := f32(rl.GetScreenHeight())
-
-		scale := min(screen_width/f32(g.render_texture.texture.width), screen_height/f32(g.render_texture.texture.height))
-
-		src := rl.Rectangle{ 0, 0, f32(g.render_texture.texture.width), f32(-g.render_texture.texture.height) }
-		
-		window_midpoint_x    := screen_width -  (f32(g.render_texture.texture.width)   * scale) / 2
-		window_midpoint_y    := screen_height - (f32(g.render_texture.texture.height)  * scale) / 2
-		window_scaled_width  := f32(g.render_texture.texture.width)  * scale
-		window_scaled_height := f32(g.render_texture.texture.height) * scale
-
-		dst := rl.Rectangle{(screen_width - window_scaled_width)/2, (screen_height - window_scaled_height)/2, window_scaled_width, window_scaled_height}
-		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
-		
-		draw_debug_overlay()
-
-	}
-}
 
 draw_debug_overlay :: proc() {
 	if !g.debug.show_overlay do return
@@ -234,44 +142,8 @@ draw_debug_overlay :: proc() {
 	rl.GuiCheckBox({16, 156, 16, 16}, "draw debug", &g.debug.debug_draw)
 }
 
-draw :: proc() {
-	
-}
 
 
-
-@(export)
-game_update :: proc() {
-	// RECORD THEN IMMEDIATELY PLAYBACK
-	if rl.IsKeyPressed(.L) {
-		if g.irs.is_playback {
-			end_input_playback(&g.irs)
-			g.old_input_state = {}
-		} else if g.irs.is_recording {
-			end_recording_input(&g.irs)
-			begin_input_playback(&g.irs, &g.gs)
-			g.irs.playback_frame = 0
-		} else if !g.irs.is_recording && !g.irs.is_playback {
-			begin_recording_input(&g.irs, &g.gs)			
-		}
-	}
-
-	update_all_input_state()
-
-	if g.irs.is_playback {
-		playback_input(&g.irs, &g.gs, &g.input_state)
-	} else if g.irs.is_recording {
-		record_input(&g.irs, &g.input_state)
-	}
-
-	g.old_input_state = g.input_state
-	
-	update()
-	
-
-	// Everything on tracking allocator is valid until end-of-frame.
-	free_all(context.temp_allocator)
-}
 
 @(export)
 game_init_window :: proc() {
@@ -291,7 +163,7 @@ game_init :: proc() {
 		debug = { show_overlay = true, player_speed = 100 },
 	}
 
-	g.render_texture = rl.LoadRenderTexture(1280, 720)	
+	g.render_texture = rl.LoadRenderTexture(1280, 720)
 
 	game_hot_reloaded(g)
 }
