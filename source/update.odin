@@ -508,7 +508,7 @@ update :: proc() {
 
 
 	rl.BeginTextureMode(g.render_texture)
-	rl.ClearBackground(PALETTE_1)
+	rl.ClearBackground(PALETTE_2)
 
 	rl.BeginMode2D(game_camera())
 
