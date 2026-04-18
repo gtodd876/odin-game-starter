@@ -41,9 +41,15 @@ game_update :: proc() {
 	free_all(context.temp_allocator)
 }
 
-tilemap_put_tile :: proc(tilemap : ^Tilemap, x, y, val : int) {
+tilemap_is_coord_in_bounds :: proc(tilemap : ^Tilemap, x, y : int) -> bool {
 	in_bounds := x >= 0 && x < tilemap.width &&
 		y >= 0 && y < tilemap.height
+	return in_bounds
+}
+
+tilemap_set_tile :: proc(tilemap : ^Tilemap, x, y, val : int) {
+	in_bounds := tilemap_is_coord_in_bounds(tilemap, x, y)
+
 	if in_bounds {
 		tilemap.tiles[(y*tilemap.width)+x] = val
 	} else {
@@ -54,7 +60,17 @@ tilemap_put_tile :: proc(tilemap : ^Tilemap, x, y, val : int) {
 	}
 }
 
-put_chunk_into_tilemap :: proc(tilemap : ^Tilemap, chunk_x, chunk_y : int, tiles:[]int) {
+tilemap_get_tile_val ::proc(tilemap :^Tilemap, x, y : int) -> int {
+	in_bounds := tilemap_is_coord_in_bounds(tilemap, x, y)
+	val := 0
+	if in_bounds {
+		val = tilemap.tiles[(y*tilemap.width)+x]
+	} else {
+	}
+	return val
+}
+
+set_chunk_tiles_in_tilemap :: proc(tilemap : ^Tilemap, chunk_x, chunk_y : int, tiles:[]int) {
 	min_tile_x := chunk_x * chunk_width
 	min_tile_y := chunk_y * chunk_height
 	max_tile_x := min_tile_x + chunk_width
@@ -63,7 +79,7 @@ put_chunk_into_tilemap :: proc(tilemap : ^Tilemap, chunk_x, chunk_y : int, tiles
 	for tile_x, i_x in min_tile_x..<max_tile_x {
 		for tile_y, i_y in min_tile_y..<max_tile_y {
 			tile_val := tiles[(i_y*chunk_width)+i_x]
-			tilemap_put_tile(tilemap, tile_x, tile_y, tile_val)
+			tilemap_set_tile(tilemap, tile_x, tile_y, tile_val)
 		}
 	}
 
@@ -95,6 +111,8 @@ tilemap_get_chunk_tiles ::proc(tilemap : ^Tilemap, chunk_x, chunk_y : int) -> [t
 	return tilemap_chunk
 }
 
+
+
 update :: proc() {
 
 	// NOTE(john): these are ints in here only because its easy to write in code
@@ -112,7 +130,24 @@ update :: proc() {
 
 	if g.debug.paused do return
 
-	input: rl.Vector2
+	// NOTE(john) cause camera got centered at 0,0
+	arrangement_pos := [2]f32{-1280/2,-720/2}
+
+	{ // editor stuff
+		mouse_screen := rl.GetMousePosition()
+		mouse_world := rl.GetScreenToWorld2D(mouse_screen, game_camera())
+		mouse_rel_tilemap := mouse_world - arrangement_pos
+		if (rl.IsMouseButtonPressed(.LEFT)) {
+			tile_x := int(mouse_rel_tilemap.x) / tile_size
+			tile_y := int(mouse_rel_tilemap.y) / tile_size
+			tile_val := tilemap_get_tile_val(tilemap, tile_x, tile_y)
+			if tile_val == 1 {
+				 tilemap_set_tile(tilemap, tile_x, tile_y, 0)
+			} else if tile_val == 0 {
+				 tilemap_set_tile(tilemap, tile_x, tile_y, 1)				
+			}
+		}
+	}
 
 	if IsKeyPressed(.UP) || IsKeyPressed(.W) {
 		g.gs.hovered_chunk.y -= 1
@@ -136,8 +171,8 @@ update :: proc() {
 			selected_tiles := tilemap_get_chunk_tiles(tilemap,
 				g.gs.selected_chunk.x, g.gs.selected_chunk.y)
 
-			put_chunk_into_tilemap(tilemap, g.gs.hovered_chunk.x, g.gs.hovered_chunk.y, selected_tiles[:])
-			put_chunk_into_tilemap(tilemap, g.gs.selected_chunk.x, g.gs.selected_chunk.y, hovered_tiles[:])
+			set_chunk_tiles_in_tilemap(tilemap, g.gs.hovered_chunk.x, g.gs.hovered_chunk.y, selected_tiles[:])
+			set_chunk_tiles_in_tilemap(tilemap, g.gs.selected_chunk.x, g.gs.selected_chunk.y, hovered_tiles[:])
 			g.gs.is_chunk_selection_active = false
 		} else {
 			g.gs.is_chunk_selection_active = true
@@ -152,7 +187,7 @@ update :: proc() {
 
 
 
-	g.gs.player_pos += input * rl.GetFrameTime() * g.debug.player_speed
+	// g.gs.player_pos += input * rl.GetFrameTime() * g.debug.player_speed
 
 
 	rl.BeginTextureMode(g.render_texture)
@@ -162,8 +197,6 @@ update :: proc() {
 
 
 	// NOTE(john) cause camera got centered at 0,0
-	arrangement_pos := [2]f32{-1280/2,-720/2}
-
 
 	for chunk_x in 0..<tilemap.num_chunks_x {
 		for chunk_y in 0..<tilemap.num_chunks_y {
@@ -259,7 +292,7 @@ update :: proc() {
 		dst := rl.Rectangle{(screen_width - window_scaled_width)/2, (screen_height - window_scaled_height)/2, window_scaled_width, window_scaled_height}
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
 
-		draw_debug_overlay()
+		// draw_debug_overlay()
 
 	}
 }
