@@ -234,7 +234,7 @@ draw_debug_overlay :: proc() {
 		}
 	}
 
-	rl.GuiCheckBox({px+8, py+250, 16, 16}, "DMG shader", &g.dmg_enabled)
+	rl.GuiCheckBox({px+8, py+250, 16, 16}, "DMG shader (F2)", &g.dmg_enabled)
 }
 
 

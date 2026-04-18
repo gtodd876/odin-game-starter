@@ -360,6 +360,7 @@ update :: proc() {
 
 	tilemap := &g.gs.tilemap
 
+	if rl.IsKeyPressed(.F2) do g.dmg_enabled = !g.dmg_enabled
 	if rl.IsKeyPressed(.F3) do g.debug.show_overlay = !g.debug.show_overlay
 	if rl.IsKeyPressed(.F4) do g.debug.paused = !g.debug.paused
 
