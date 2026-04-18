@@ -264,6 +264,7 @@ game_init :: proc() {
 	g.sfx_bank["confirm"] = rl.LoadSound("assets/Confirm.wav")
 	g.sfx_bank["put-chunk"] = rl.LoadSound("assets/SFX_OptionChangev7.wav")
 
+	t_load_data(context.temp_allocator)
 
 	game_hot_reloaded(g)
 }

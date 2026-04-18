@@ -397,15 +397,12 @@ update :: proc() {
 		mouse_screen := rl.GetMousePosition()
 		mouse_world := rl.GetScreenToWorld2D(mouse_screen, game_camera())
 		mouse_rel_tilemap := mouse_world - tilemap_world_origin(tilemap)
-		if (rl.IsMouseButtonPressed(.LEFT)) {
-			tile_x := int(mouse_rel_tilemap.x) / tile_size
-			tile_y := int(mouse_rel_tilemap.y) / tile_size
-			tile_val := tilemap_get_tile_val(tilemap, tile_x, tile_y)
-			if tile_val == 1 {
-				 tilemap_set_tile(tilemap, tile_x, tile_y, 0)
-			} else if tile_val == 0 {
-				 tilemap_set_tile(tilemap, tile_x, tile_y, 1)
-			}
+		tile_x := int(mouse_rel_tilemap.x) / tile_size
+		tile_y := int(mouse_rel_tilemap.y) / tile_size	
+		if (rl.IsMouseButtonDown(.LEFT)) {
+			tilemap_set_tile(tilemap, tile_x, tile_y, 1)
+		} else if rl.IsMouseButtonDown(.RIGHT) {
+			tilemap_set_tile(tilemap, tile_x, tile_y, 0)	
 		}
 	}
 
@@ -546,7 +543,7 @@ update :: proc() {
 				chunk_pos.x, chunk_pos.y, chunk_width_in_units, chunk_height_in_units
 			}
 			color := rl.YELLOW
-			color.a = 100
+			color.a = g.gs.is_rearranging_chunks ? 100 : 10
 
 			// Note(john) using term chunk id to refer to the 2D index
 			// which can really be thought of as an integer coordinate
