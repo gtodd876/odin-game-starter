@@ -165,6 +165,27 @@ update :: proc() {
 		// }
 	}
 
+	{ // swap levels
+		level_keys := [?] rl.KeyboardKey {
+			rl.KeyboardKey.ZERO,
+			rl.KeyboardKey.ONE,
+			rl.KeyboardKey.TWO,
+			rl.KeyboardKey.THREE,
+			rl.KeyboardKey.FOUR,
+			rl.KeyboardKey.FIVE,
+			rl.KeyboardKey.SIX,
+			rl.KeyboardKey.SEVEN,
+			rl.KeyboardKey.EIGHT,
+			rl.KeyboardKey.NINE,
+		}
+
+		for level_key, i in level_keys {
+			if rl.IsKeyPressed(level_key) {
+				g.gs.tilemap = g.levels[i]
+			}
+		}
+	}
+
 	load_button := rl.KeyboardKey.F11
 	if rl.IsKeyPressed(load_button) {
 		t_load_data(context.temp_allocator)
