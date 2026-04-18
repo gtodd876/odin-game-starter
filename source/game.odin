@@ -39,7 +39,18 @@ PALETTE_2 :: rl.Color{0xA0, 0xA8, 0x40, 0xFF}
 PALETTE_3 :: rl.Color{0x70, 0x80, 0x28, 0xFF}
 PALETTE_4 :: rl.Color{0x40, 0x50, 0x10, 0xFF}
 
+Direction :: enum {
+	None,
+	Up,
+	Left,
+	Down,
+	Right
+}
 
+Moving_State :: enum {
+	Idle,
+	Moving
+}
 
 Tile_Type :: enum {
 	Trail,
@@ -87,6 +98,11 @@ Game_State :: struct {
 	is_chunk_selection_active : bool,
 	selected_chunk : [2]int,
 	tilemap : Tilemap,
+	move_state: Moving_State,
+	move_speed: f32,
+	current_direction: Direction,
+	queued_direction: Direction,
+	player_tile: [2]int
 }
 
 level_cap :: 32 // just add more if there ends up being more
@@ -101,6 +117,7 @@ Game_Memory :: struct {
 	levels : [level_cap]Tilemap, 
 	run: bool,
 	debug: Debug_State,
+	crabby_texture: rl.Texture2D
 }
 
 g: ^Game_Memory
@@ -172,9 +189,26 @@ game_init :: proc() {
 
 	g.render_texture = rl.LoadRenderTexture(1280, 720)
 
+	g.crabby_texture = rl.LoadTexture("assets/crab-still.png")
+
 	tilemap := init_tilemap_by_specifying_chunks(3, 2)
 
 	g.gs.tilemap = tilemap
+
+	g.gs.current_direction = .None
+	g.gs.queued_direction  = .None
+	g.gs.move_state        = .Idle
+	g.gs.move_speed        = 4.0 // tiles per second
+
+	spawn: for ty in 0..<g.gs.tilemap.height {
+		for tx in 0..<g.gs.tilemap.width {
+			if tilemap_is_walkable(&g.gs.tilemap, tx, ty) {
+				g.gs.player_tile = {tx, ty}
+				g.gs.player_pos  = tile_center_world(&g.gs.tilemap, tx, ty)
+				break spawn
+			}
+		}
+	}
 
 	game_hot_reloaded(g)
 }
@@ -193,6 +227,7 @@ game_should_run :: proc() -> bool {
 
 @(export)
 game_shutdown :: proc() {
+	rl.UnloadTexture(g.crabby_texture)
 	free(g)
 }
 

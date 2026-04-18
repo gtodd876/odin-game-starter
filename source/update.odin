@@ -136,6 +136,119 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 }
 
 
+tilemap_world_origin :: proc(t: ^Tilemap) -> [2]f32 {
+	return {
+		-f32(t.width)  * tile_size_f * 0.5,
+		-f32(t.height) * tile_size_f * 0.5,
+	}
+}
+
+tile_center_world :: proc(t: ^Tilemap, tx, ty: int) -> [2]f32 {
+	o := tilemap_world_origin(t)
+	return {
+		o.x + f32(tx)*tile_size_f + tile_size_f*0.5,
+		o.y + f32(ty)*tile_size_f + tile_size_f*0.5,
+	}
+}
+
+tilemap_is_walkable :: proc(t: ^Tilemap, tx, ty: int) -> bool {
+	if tx < 0 || tx >= t.width || ty < 0 || ty >= t.height do return false
+	return Tile_Type(t.tiles[ty*t.width + tx]) == .Trail
+}
+
+direction_vector :: proc(d: Direction) -> [2]int {
+	switch d {
+	case .Up:    return { 0, -1}
+	case .Down:  return { 0,  1}
+	case .Left:  return {-1,  0}
+	case .Right: return { 1,  0}
+	case .None:  return { 0,  0}
+	}
+	return {0, 0}
+}
+
+opposite_direction :: proc(d: Direction) -> Direction {
+	switch d {
+	case .Up:    return .Down
+	case .Down:  return .Up
+	case .Left:  return .Right
+	case .Right: return .Left
+	case .None:  return .None
+	}
+	return .None
+}
+
+update_crab :: proc() {
+	gs := &g.gs
+	t  := &gs.tilemap
+
+	// 1. Latest WASD press sets queued direction.
+	if      IsKeyPressed(.W) do gs.queued_direction = .Up
+	else if IsKeyPressed(.S) do gs.queued_direction = .Down
+	else if IsKeyPressed(.A) do gs.queued_direction = .Left
+	else if IsKeyPressed(.D) do gs.queued_direction = .Right
+
+	// 2. Reversal is allowed mid-tile.
+	if gs.move_state == .Moving &&
+	   gs.queued_direction != .None &&
+	   gs.queued_direction == opposite_direction(gs.current_direction) {
+		gs.current_direction = gs.queued_direction
+		gs.queued_direction = .None
+	}
+
+	// 3. Kick off from idle when queued leads into a walkable tile.
+	if gs.move_state == .Idle && gs.queued_direction != .None {
+		step := direction_vector(gs.queued_direction)
+		next := [2]int{gs.player_tile.x + step.x, gs.player_tile.y + step.y}
+		if tilemap_is_walkable(t, next.x, next.y) {
+			gs.current_direction = gs.queued_direction
+			gs.move_state = .Moving
+		}
+		gs.queued_direction = .None
+	}
+
+	if gs.move_state != .Moving do return
+
+	// 4. Advance along current direction.
+	dv := direction_vector(gs.current_direction)
+	dv_f := [2]f32{f32(dv.x), f32(dv.y)}
+	speed_px := gs.move_speed * tile_size_f
+	gs.player_pos += dv_f * speed_px * rl.GetFrameTime()
+
+	// 5. Crossed into the next tile? Re-evaluate at the new tile center.
+	center := tile_center_world(t, gs.player_tile.x, gs.player_tile.y)
+	delta := gs.player_pos - center
+	axis_dist := dv_f.x*delta.x + dv_f.y*delta.y
+
+	if axis_dist >= tile_size_f {
+		gs.player_tile.x += dv.x
+		gs.player_tile.y += dv.y
+		new_center := tile_center_world(t, gs.player_tile.x, gs.player_tile.y)
+
+		turned := false
+		if gs.queued_direction != .None && gs.queued_direction != gs.current_direction {
+			step := direction_vector(gs.queued_direction)
+			next := [2]int{gs.player_tile.x + step.x, gs.player_tile.y + step.y}
+			if tilemap_is_walkable(t, next.x, next.y) {
+				gs.current_direction = gs.queued_direction
+				gs.player_pos = new_center
+				turned = true
+			}
+		}
+		gs.queued_direction = .None
+
+		if !turned {
+			step := direction_vector(gs.current_direction)
+			next := [2]int{gs.player_tile.x + step.x, gs.player_tile.y + step.y}
+			if !tilemap_is_walkable(t, next.x, next.y) {
+				gs.player_pos = new_center
+				gs.current_direction = .None
+				gs.move_state = .Idle
+			}
+		}
+	}
+}
+
 update :: proc() {
 
 	// NOTE(john): these are ints in here only because its easy to write in code
@@ -193,13 +306,10 @@ update :: proc() {
 
 	if g.debug.paused do return
 
-	// NOTE(john) cause camera got centered at 0,0
-	arrangement_pos := [2]f32{-1280/2,-720/2}
-
 	{ // editor stuff
 		mouse_screen := rl.GetMousePosition()
 		mouse_world := rl.GetScreenToWorld2D(mouse_screen, game_camera())
-		mouse_rel_tilemap := mouse_world - arrangement_pos
+		mouse_rel_tilemap := mouse_world - tilemap_world_origin(tilemap)
 		if (rl.IsMouseButtonPressed(.LEFT)) {
 			tile_x := int(mouse_rel_tilemap.x) / tile_size
 			tile_y := int(mouse_rel_tilemap.y) / tile_size
@@ -207,25 +317,15 @@ update :: proc() {
 			if tile_val == 1 {
 				 tilemap_set_tile(tilemap, tile_x, tile_y, 0)
 			} else if tile_val == 0 {
-				 tilemap_set_tile(tilemap, tile_x, tile_y, 1)				
+				 tilemap_set_tile(tilemap, tile_x, tile_y, 1)
 			}
 		}
 	}
 
-	if IsKeyPressed(.UP) || IsKeyPressed(.W) {
-		g.gs.hovered_chunk.y -= 1
-	}
-	if IsKeyPressed(.DOWN) || IsKeyPressed(.S) {
-		g.gs.hovered_chunk.y += 1
-
-	}
-	if IsKeyPressed(.LEFT) || IsKeyPressed(.A) {
-		g.gs.hovered_chunk.x -= 1
-
-	}
-	if IsKeyPressed(.RIGHT) || IsKeyPressed(.D) {
-		g.gs.hovered_chunk.x += 1
-	}
+	if IsKeyPressed(.UP)    do g.gs.hovered_chunk.y -= 1
+	if IsKeyPressed(.DOWN)  do g.gs.hovered_chunk.y += 1
+	if IsKeyPressed(.LEFT)  do g.gs.hovered_chunk.x -= 1
+	if IsKeyPressed(.RIGHT) do g.gs.hovered_chunk.x += 1
 
 	if IsKeyPressed(.SPACE) {
 		if g.gs.is_chunk_selection_active {
@@ -250,7 +350,7 @@ update :: proc() {
 
 
 
-	// g.gs.player_pos += input * rl.GetFrameTime() * g.debug.player_speed
+	update_crab()
 
 
 	rl.BeginTextureMode(g.render_texture)
@@ -264,9 +364,10 @@ update :: proc() {
 	for chunk_x in 0..<tilemap.num_chunks_x {
 		for chunk_y in 0..<tilemap.num_chunks_y {
 			tilemap_chunk := tilemap_get_chunk_tiles(tilemap, chunk_x, chunk_y)
+			origin := tilemap_world_origin(tilemap)
 			chunk_pos := [2]f32{
-				arrangement_pos.x + (tile_size_f*chunk_width_f*f32(chunk_x)),
-				arrangement_pos.y + (tile_size_f*chunk_width_f*f32(chunk_y)),
+    			origin.x + (tile_size_f*chunk_width_f*f32(chunk_x)),
+       			origin.y + (tile_size_f*chunk_width_f*f32(chunk_y)),
 			}
 
 			// NOTE(johnb) units means pixels. Using the term units, cause
@@ -316,9 +417,16 @@ update :: proc() {
 	chunk_pos := [2]f32 {0, 0}
 
 
+	{ // DRAW CRAB
+		tex := g.crabby_texture
+		src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
+		dst := rl.Rectangle{g.gs.player_pos.x, g.gs.player_pos.y, tile_size_f, tile_size_f}
+		origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
+		rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
+	}
 
 	if g.debug.debug_draw {
-		rl.DrawRectangleLinesEx({g.gs.player_pos.x, g.gs.player_pos.y, 16, 16}, 1, rl.MAGENTA)
+		rl.DrawRectangleLinesEx({g.gs.player_pos.x - 8, g.gs.player_pos.y - 8, 16, 16}, 1, rl.MAGENTA)
 		rl.DrawLineV({-5, 0}, {5, 0}, rl.YELLOW)
 		rl.DrawLineV({0, -5}, {0, 5}, rl.YELLOW)
 	}
@@ -355,7 +463,7 @@ update :: proc() {
 		dst := rl.Rectangle{(screen_width - window_scaled_width)/2, (screen_height - window_scaled_height)/2, window_scaled_width, window_scaled_height}
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
 
-		// draw_debug_overlay()
+		draw_debug_overlay()
 
 	}
 }
