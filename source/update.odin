@@ -134,7 +134,7 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 			return false
 		}
 	}
-		
+
 	return true
 }
 
@@ -436,7 +436,7 @@ update :: proc() {
 	{ // cycle thru selected tile type
 		tile_type_switch_key := rl.KeyboardKey.M
 		if rl.IsKeyPressed(tile_type_switch_key) {
-			g.editor_selected_tile_type = Tile_Type((int(g.editor_selected_tile_type)+1)%%len(Tile_Type)) 
+			g.editor_selected_tile_type = Tile_Type((int(g.editor_selected_tile_type)+1)%%len(Tile_Type))
 		}
 	}
 
@@ -461,7 +461,7 @@ update :: proc() {
 			if (rl.IsMouseButtonDown(.LEFT)) {
 				tilemap_set_tile(tilemap, tile_x, tile_y, g.editor_selected_tile_type)
 			} else if rl.IsMouseButtonDown(.RIGHT) {
-				tilemap_set_tile(tilemap, tile_x, tile_y, .Trail)	
+				tilemap_set_tile(tilemap, tile_x, tile_y, .Trail)
 			}
 		} else {
 			// NOTE(john) Only works when zoomed out
@@ -469,7 +469,7 @@ update :: proc() {
 				g.gs.crab = absolute_tile_to_tilemap_pos(tile_x, tile_y)
 			}
 		}
-		
+
 	}
 
 	{
@@ -581,7 +581,7 @@ update :: proc() {
 
 	{ // crab get key
 		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
-		tile_type_that_crab_on := tilemap_get_tile_val(&g.gs.level.tilemap, 
+		tile_type_that_crab_on := tilemap_get_tile_val(&g.gs.level.tilemap,
 			crab_tile.x, crab_tile.y)
 		crab_on_a_key := tile_type_that_crab_on == .Key
 		if crab_on_a_key {
@@ -835,6 +835,12 @@ update :: proc() {
 		2,
 		PALETTE_4,
 	)
+	if g.gs.current_level_index == 0 {
+		texWidth := f32(g.render_texture.texture.width / 2)
+		texHeight := f32(g.render_texture.texture.height)
+		rl.DrawTextEx(g.lcd_font, "Lost crab in the great sand labyrinth", {texWidth/2,10}, 64, 2, PALETTE_4)
+	}
+
 
 	rl.EndTextureMode()
 
@@ -864,7 +870,7 @@ update :: proc() {
 		}
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
 
-		
+
 
 		draw_debug_overlay()
 
