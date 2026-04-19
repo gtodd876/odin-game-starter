@@ -90,26 +90,6 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 }
 
 
-tilemap_world_origin :: proc(t: ^Tilemap) -> [2]f32 {
-	return {
-		-f32(t.width)  * tile_size_f * 0.5,
-		-f32(t.height) * tile_size_f * 0.5,
-	}
-}
-
-tile_center_world :: proc(t: ^Tilemap, tx, ty: int) -> [2]f32 {
-	o := tilemap_world_origin(t)
-	return {
-		o.x + f32(tx)*tile_size_f + tile_size_f*0.5,
-		o.y + f32(ty)*tile_size_f + tile_size_f*0.5,
-	}
-}
-
-tilemap_is_walkable :: proc(t: ^Tilemap, tx, ty: int) -> bool {
-	if tx < 0 || tx >= t.width || ty < 0 || ty >= t.height do return false
-	return Tile_Type(t.tiles[ty*t.width + tx]) != .Solid &&
-		Tile_Type(t.tiles[ty*t.width + tx]) != .Lock
-}
 
 direction_vector :: proc(d: Direction) -> [2]int {
 	switch d {
@@ -133,47 +113,6 @@ opposite_direction :: proc(d: Direction) -> Direction {
 	return .None
 }
 
-chunk_world_origin :: proc(t: ^Tilemap, chunk_x, chunk_y: int) -> [2]f32 {
-	o := tilemap_world_origin(t)
-	return {
-		o.x + f32(chunk_x) * chunk_width_f  * tile_size_f,
-		o.y + f32(chunk_y) * chunk_height_f * tile_size_f,
-	}
-}
-
-tilemap_pos_to_world_pos :: proc(t: ^Tilemap, cp: Tilemap_Pos) -> [2]f32 {
-	co := chunk_world_origin(t, cp.chunk.x, cp.chunk.y)
-	return {
-		co.x + cp.rel_pos.x * tile_size_f,
-		co.y + cp.rel_pos.y * tile_size_f,
-	}
-}
-
-tilemap_pos_absolute_tile :: proc(cp: Tilemap_Pos) -> [2]int {
-	return {
-		cp.chunk.x * chunk_width  + int(cp.rel_pos.x),
-		cp.chunk.y * chunk_height + int(cp.rel_pos.y),
-	}
-}
-
-absolute_tile_to_tilemap_pos ::proc(tile_x, tile_y :int) -> Tilemap_Pos {
-	ret := Tilemap_Pos {
-        chunk   = [2]int{tile_x / chunk_width, tile_y / chunk_height},
-        rel_pos = [2]f32{
-            f32(tile_x % chunk_width)  + 0.5,
-            f32(tile_y % chunk_height) + 0.5,
-        },
-    }
-    return ret
-}
-
-// Wrap rel_pos into [0, chunk_w) x [0, chunk_h), shifting chunk to compensate.
-tilemap_pos_normalize_chunk :: proc(cp: ^Tilemap_Pos) {
-	for cp.rel_pos.x >= chunk_width_f  { cp.chunk.x += 1; cp.rel_pos.x -= chunk_width_f  }
-	for cp.rel_pos.x < 0               { cp.chunk.x -= 1; cp.rel_pos.x += chunk_width_f  }
-	for cp.rel_pos.y >= chunk_height_f { cp.chunk.y += 1; cp.rel_pos.y -= chunk_height_f }
-	for cp.rel_pos.y < 0               { cp.chunk.y -= 1; cp.rel_pos.y += chunk_height_f }
-}
 
 crab_can_step :: proc(t: ^Tilemap, cp: Tilemap_Pos, dir: Direction) -> bool {
 	if dir == .None do return false

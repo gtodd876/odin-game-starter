@@ -52,46 +52,6 @@ Moving_State :: enum {
 	Moving
 }
 
-Tile_Type :: enum {
-	Trail,
-	Solid,
-	Key,
-	Lock,
-	Whatever,
-}
-
-tile_size :: 64
-chunk_width :: 5
-chunk_height :: 5
-
-tile_size_f : f32 : tile_size
-chunk_width_f : f32 : chunk_width
-chunk_height_f : f32 : chunk_height
-
-tiles_in_chunk :: chunk_width * chunk_height
-
-
-max_chunks :: 36
-max_tiles :: tiles_in_chunk*max_chunks
-
-
-Tilemap :: struct {
-	tiles : [max_tiles]Tile_Type,
-	width : int,
-	height : int,
-	num_chunks_x : int,
-	num_chunks_y : int,
-}
-
-Crab_Pos :: struct {
-	chunk:   [2]int,   // which chunk the crab is in
-	rel_pos: [2]f32,   // chunk-local position in tile units, [0, chunk_width) x [0, chunk_height). tile N center at rel_pos = N + 0.5.
-}
-
-Tilemap_Tile_Pos :: struct {
-	chunk : [2]int,
-	tile : [2]int,
-}
 
 
 Debug_State :: struct {
@@ -128,7 +88,7 @@ Game_State :: struct {
 	zoom_timer : f32,
 	camera_zoom : f32,
 	camera_target : [2]f32,
-	crab: Crab_Pos,
+	crab: Tilemap_Pos,
 	num_keys_crab_has : int,
 	elapsed_time: f32,
 }
