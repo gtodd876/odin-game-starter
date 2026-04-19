@@ -102,7 +102,13 @@ Game_State :: struct {
 	crab_anim_time: f32,
 	crab_facing: Direction,
 	elapsed_time: f32,
+	raccoon: Tilemap_Pos,
+	raccoon_direction: Direction,
+	raccoon_move_speed: f32,
+	raccoon_active: bool,
 }
+
+raccoon_level_index :: 4
 
 level_cap :: 32 // just add more if there ends up being more
 num_levels :: 10 // just add more if there ends up being more

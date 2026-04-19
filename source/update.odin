@@ -62,11 +62,49 @@ swap_to_level :: proc(i: int) {
 	g.initial_current_level = g.levels[i]
 	g.gs.level = g.initial_current_level
 	g.gs.crab = g.initial_current_level.crab_start_pos
-	
+
+	g.gs.raccoon_active = (i == raccoon_level_index)
+	if g.gs.raccoon_active {
+		spawn_raccoon_opposite_crab()
+	}
+
 	// g.initial_current_level
 	// g.levels[g.gs.current_level_index] = g.initial_current_level
 	// g.gs.level = g.levels[i]
 	// g.gs.crab = g.gs.level.crab_start_pos
+}
+
+spawn_raccoon_opposite_crab :: proc() {
+	t := &g.gs.level.tilemap
+	crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
+	target_x := t.width  - 1 - crab_tile.x
+	target_y := t.height - 1 - crab_tile.y
+
+	// Spiral outward from the opposite corner until we land on a walkable tile.
+	// Guaranteed to terminate because the crab's own tile is walkable.
+	max_radius := t.width + t.height
+	found_x, found_y := target_x, target_y
+	search: for radius in 0..=max_radius {
+		for dy in -radius..=radius {
+			for dx in -radius..=radius {
+				if abs(dx) != radius && abs(dy) != radius do continue
+				tx := target_x + dx
+				ty := target_y + dy
+				if tx < 0 || tx >= t.width || ty < 0 || ty >= t.height do continue
+				if tx == crab_tile.x && ty == crab_tile.y do continue
+				if tilemap_is_walkable(t, tx, ty) {
+					found_x = tx
+					found_y = ty
+					break search
+				}
+			}
+		}
+	}
+
+	g.gs.raccoon = absolute_tile_to_tilemap_pos(found_x, found_y)
+	g.gs.raccoon_direction = .None
+	g.gs.raccoon_facing    = .Left
+	g.gs.raccoon_move_speed = 3.0
 }
 
 cycle_record_playback :: proc() {
@@ -256,6 +294,109 @@ tilemap_pos_normalize_chunk(&gs.crab)
 
 }
 
+blinky_decision_order :: [4]Direction{ .Up, .Left, .Down, .Right }
+
+// Exclude the reverse of current direction; pick neighbor whose tile minimizes
+// squared distance to the target. If every forward option is blocked, reverse.
+blinky_pick_direction :: proc(t: ^Tilemap, from: Tilemap_Pos, target: [2]int, current: Direction) -> Direction {
+	reverse := opposite_direction(current)
+	best := Direction.None
+	best_dist := max(f32)
+
+	for dir in blinky_decision_order {
+		if dir == reverse do continue
+		if !crab_can_step(t, from, dir) do continue
+
+		step := direction_vector(dir)
+		from_tile := tilemap_pos_absolute_tile(from)
+		nx := from_tile.x + step.x
+		ny := from_tile.y + step.y
+		dx := f32(nx - target.x)
+		dy := f32(ny - target.y)
+		d  := dx*dx + dy*dy
+		if d < best_dist {
+			best_dist = d
+			best = dir
+		}
+	}
+
+	if best == .None && reverse != .None && crab_can_step(t, from, reverse) {
+		best = reverse
+	}
+	return best
+}
+
+update_raccoon :: proc() {
+	if !g.gs.raccoon_active do return
+
+	gs := &g.gs
+	t  := &gs.level.tilemap
+
+	defer tilemap_pos_normalize_chunk(&gs.raccoon)
+
+	// Bootstrap: on first tick with no direction, pick one immediately.
+	if gs.raccoon_direction == .None {
+		target := tilemap_pos_absolute_tile(gs.crab)
+		gs.raccoon_direction = blinky_pick_direction(t, gs.raccoon, target, .None)
+		if gs.raccoon_direction == .None do return
+		gs.raccoon_facing = gs.raccoon_direction
+	}
+
+	dv := direction_vector(gs.raccoon_direction)
+	dv_f := [2]f32{f32(dv.x), f32(dv.y)}
+	pre_rel := gs.raccoon.rel_pos
+	gs.raccoon.rel_pos += dv_f * gs.raccoon_move_speed * rl.GetFrameTime()
+
+	crossed_cx := gs.raccoon.rel_pos.x
+	crossed_cy := gs.raccoon.rel_pos.y
+	crossed := false
+
+	if dv.x != 0 {
+		pre_u  := math.floor(pre_rel.x - 0.5)
+		post_u := math.floor(gs.raccoon.rel_pos.x - 0.5)
+		if pre_u != post_u {
+			crossed = true
+			u_cross := dv.x > 0 ? post_u : pre_u
+			crossed_cx = u_cross + 0.5
+		}
+	}
+	if dv.y != 0 {
+		pre_u  := math.floor(pre_rel.y - 0.5)
+		post_u := math.floor(gs.raccoon.rel_pos.y - 0.5)
+		if pre_u != post_u {
+			crossed = true
+			u_cross := dv.y > 0 ? post_u : pre_u
+			crossed_cy = u_cross + 0.5
+		}
+	}
+
+	if !crossed do return
+
+	// At the crossed tile center: snap, run Blinky AI, resume.
+	saved_rel   := gs.raccoon.rel_pos
+	saved_chunk := gs.raccoon.chunk
+	gs.raccoon.rel_pos = {crossed_cx, crossed_cy}
+	tilemap_pos_normalize_chunk(&gs.raccoon)
+
+	target := tilemap_pos_absolute_tile(gs.crab)
+	next_dir := blinky_pick_direction(t, gs.raccoon, target, gs.raccoon_direction)
+
+	if next_dir == .None {
+		// Completely boxed in (walls on all sides including behind). Stop here.
+		gs.raccoon_direction = .None
+		return
+	}
+
+	if next_dir == gs.raccoon_direction {
+		// Straight through — preserve overshoot so movement stays smooth.
+		gs.raccoon.rel_pos = saved_rel
+		gs.raccoon.chunk   = saved_chunk
+	} else {
+		gs.raccoon_direction = next_dir
+	}
+	gs.raccoon_facing = gs.raccoon_direction
+}
+
 update :: proc() {
 
 	// NOTE(john): these are ints in here only because its easy to write in code
@@ -426,6 +567,20 @@ update :: proc() {
 
 
 	update_crab()
+	update_raccoon()
+
+	if g.gs.raccoon_active &&
+	   tilemap_pos_absolute_tile(g.gs.crab) == tilemap_pos_absolute_tile(g.gs.raccoon) {
+		// TODO: swap to a dedicated raccoon-hit sfx once the asset lands.
+		play_sound_by_name("smack")
+		swap_to_level(g.gs.current_level_index)
+		g.gs.num_keys_crab_has = 0
+		g.gs.elapsed_time      = 0
+		g.gs.move_state        = .Idle
+		g.gs.current_direction = .None
+		g.gs.queued_direction  = .None
+		return
+	}
 
 	{ // crab get key
 		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
@@ -643,6 +798,23 @@ update :: proc() {
 
 		crab_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
 		rl.DrawCircleV(crab_wpos, 4, rl.RED)
+	}
+
+	if g.gs.raccoon_active { // DRAW RACCOON
+		// TODO: switch to animated frames when coon walk-cycle assets land.
+		tex := g.coon_texture
+		rotation : f32 = 0
+		switch g.gs.raccoon_facing {
+		case .None, .Up: rotation = 0
+		case .Right:     rotation = 90
+		case .Down:      rotation = 180
+		case .Left:      rotation = 270
+		}
+		raccoon_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.raccoon)
+		src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
+		dst := rl.Rectangle{raccoon_wpos.x, raccoon_wpos.y, tile_size_f, tile_size_f}
+		origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
+		rl.DrawTexturePro(tex, src, dst, origin, rotation, rl.WHITE)
 	}
 
 	if g.debug.debug_draw {
