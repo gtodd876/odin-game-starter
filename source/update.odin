@@ -631,7 +631,7 @@ update :: proc() {
 		src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
 		dst := rl.Rectangle{g.gs.player_pos.x, g.gs.player_pos.y, tile_size_f, tile_size_f}
 		origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
-		rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
+		rl.DrawTexturePro(tex, src, dst, origin, rotation, rl.WHITE)
 
 		for key_index in 0..<g.gs.num_keys_crab_has {
 			crab_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
