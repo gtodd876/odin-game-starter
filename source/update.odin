@@ -29,6 +29,10 @@ game_update :: proc() {
 
 	g.old_input_state = g.input_state
 
+	rl.UpdateMusicStream(g.drone_music)
+	rl.UpdateMusicStream(g.clickies_music)
+	rl.UpdateMusicStream(g.dingdings_music)
+
 	// if rl.IsKeyPressed(.F12) {
 	// 	intrinsics.debug_trap()
 	// }
@@ -134,6 +138,8 @@ swap_to_level :: proc(i: int) {
 
 	g.gs.game_over      = false
 	g.gs.level_complete = false
+
+	rl.ResumeMusicStream(g.drone_music)
 
 	// g.initial_current_level
 	// g.levels[g.gs.current_level_index] = g.initial_current_level
@@ -556,12 +562,18 @@ update :: proc() {
 		if IsKeyPressed(enter_rearrange_mode_key) || IsGamepadButtonPressed(0, enter_rearrange_mode_button) {
 			g.gs.is_rearranging_chunks = true
 			g.gs.zoom_timer = zoom_timer_duration_sec
+			play_sound_by_name("zoom-out")
+			rl.PauseMusicStream(g.drone_music)
+			rl.ResumeMusicStream(g.dingdings_music)
 		}
 
 		if IsKeyReleased(enter_rearrange_mode_key) || IsGamepadButtonReleased(0, enter_rearrange_mode_button) {
 			g.gs.is_rearranging_chunks = false
 			g.gs.is_chunk_selection_active = false
 			g.gs.zoom_timer = zoom_timer_duration_sec
+			play_sound_by_name("zoom-in")
+			rl.ResumeMusicStream(g.drone_music)
+			rl.PauseMusicStream(g.dingdings_music)
 		}
 
 
@@ -660,11 +672,18 @@ update :: proc() {
 	update_crab()
 	update_raccoon()
 
+	if g.gs.move_state == .Moving && g.gs.prev_move_state != .Moving {
+		rl.ResumeMusicStream(g.clickies_music)
+	} else if g.gs.move_state != .Moving && g.gs.prev_move_state == .Moving {
+		rl.PauseMusicStream(g.clickies_music)
+	}
+	g.gs.prev_move_state = g.gs.move_state
+
 	if !g.gs.game_over && !g.gs.level_complete &&
 	   g.gs.raccoon_active &&
 	   tilemap_pos_absolute_tile(g.gs.crab) == tilemap_pos_absolute_tile(g.gs.raccoon) {
-		// TODO: swap to a dedicated raccoon-hit sfx once the asset lands.
-		play_sound_by_name("smack")
+		play_sound_by_name("cluster")
+		rl.PauseMusicStream(g.drone_music)
 		g.gs.game_over  = true
 		g.gs.move_state = .Idle
 	}
@@ -672,6 +691,8 @@ update :: proc() {
 	if !g.gs.game_over && !g.gs.level_complete { // crab reached the flag
 		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
 		if tilemap_get_tile_val(&g.gs.level.tilemap, crab_tile.x, crab_tile.y) == .Flag {
+			play_sound_by_name("win")
+			rl.PauseMusicStream(g.drone_music)
 			g.gs.level_complete = true
 			g.gs.move_state     = .Idle
 		}
@@ -685,6 +706,7 @@ update :: proc() {
 		if crab_on_a_key {
 			tilemap_set_tile(&g.gs.level.tilemap, crab_tile.x, crab_tile.y, .Trail)
 			g.gs.num_keys_crab_has+=1
+			play_sound_by_name("chime")
 		}
 	}
 
@@ -715,7 +737,7 @@ update :: proc() {
 		if can_crab_open_lock {
 			tilemap_set_tile(&g.gs.level.tilemap, crab_next_tile.x, crab_next_tile.y, .Trail)
 			g.gs.num_keys_crab_has-=1
-
+			play_sound_by_name("unlock")
 		}
 	}
 
