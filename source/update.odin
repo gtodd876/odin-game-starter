@@ -76,6 +76,51 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 	return true
 }
 
+// Centered modal popup using the HUD's rounded-rect style.
+// Caller passes screen-center-aligned text lines; pass "" for middle to collapse to 2 lines.
+draw_popup :: proc(heading, middle, footer: cstring) {
+	rt_w := f32(g.render_texture.texture.width)
+	rt_h := f32(g.render_texture.texture.height)
+
+	popup_w := rt_w * 0.55
+	popup_h := rt_h * 0.45
+	popup_x := (rt_w - popup_w) * 0.5
+	popup_y := (rt_h - popup_h) * 0.5
+
+	popup_rect := rl.Rectangle{popup_x, popup_y, popup_w, popup_h}
+	rl.DrawRectangleRounded       (popup_rect, 0.15, 8,    PALETTE_1)
+	rl.DrawRectangleRoundedLinesEx(popup_rect, 0.15, 8, 4, PALETTE_4)
+
+	heading_size : f32 = 72
+	middle_size  : f32 = 64
+	footer_size  : f32 = 32
+	spacing      : f32 = 2
+	gap          : f32 = 24
+
+	has_middle := len(string(middle)) > 0
+
+	h_dim := rl.MeasureTextEx(g.lcd_font, heading, heading_size, spacing)
+	m_dim : [2]f32
+	if has_middle do m_dim = rl.MeasureTextEx(g.lcd_font, middle, middle_size, spacing)
+	f_dim := rl.MeasureTextEx(g.lcd_font, footer,  footer_size,  spacing)
+
+	total_h := h_dim.y + gap + f_dim.y
+	if has_middle do total_h += m_dim.y + gap
+
+	center_x := popup_x + popup_w * 0.5
+	y := popup_y + (popup_h - total_h) * 0.5
+
+	rl.DrawTextEx(g.lcd_font, heading, {center_x - h_dim.x * 0.5, y}, heading_size, spacing, PALETTE_4)
+	y += h_dim.y + gap
+
+	if has_middle {
+		rl.DrawTextEx(g.lcd_font, middle, {center_x - m_dim.x * 0.5, y}, middle_size, spacing, PALETTE_4)
+		y += m_dim.y + gap
+	}
+
+	rl.DrawTextEx(g.lcd_font, footer, {center_x - f_dim.x * 0.5, y}, footer_size, spacing, PALETTE_4)
+}
+
 swap_to_level :: proc(i: int) {
 	g.gs.current_level_index = i
 	g.initial_current_level = g.levels[i]
@@ -86,6 +131,9 @@ swap_to_level :: proc(i: int) {
 	if g.gs.raccoon_active {
 		spawn_raccoon_opposite_crab()
 	}
+
+	g.gs.game_over      = false
+	g.gs.level_complete = false
 
 	// g.initial_current_level
 	// g.levels[g.gs.current_level_index] = g.initial_current_level
@@ -184,6 +232,7 @@ crab_can_step :: proc(t: ^Tilemap, cp: Tilemap_Pos, dir: Direction) -> bool {
 }
 
 update_crab :: proc() {
+	if g.gs.game_over || g.gs.level_complete do return
 	gs := &g.gs
 	t  := &gs.level.tilemap
 
@@ -332,6 +381,7 @@ blinky_pick_direction :: proc(t: ^Tilemap, from: Tilemap_Pos, target: [2]int, cu
 
 update_raccoon :: proc() {
 	if !g.gs.raccoon_active do return
+	if g.gs.game_over || g.gs.level_complete do return
 
 	gs := &g.gs
 	t  := &gs.level.tilemap
@@ -452,7 +502,26 @@ update :: proc() {
 
 	if g.debug.paused do return
 
-	g.gs.elapsed_time += rl.GetFrameTime()
+	if g.gs.game_over || g.gs.level_complete {
+		a_pressed := rl.IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) ||
+		             rl.IsKeyPressed(.ENTER) ||
+		             rl.IsKeyPressed(.SPACE)
+		if a_pressed {
+			next_i := g.gs.current_level_index
+			if g.gs.level_complete {
+				// Last-level completion loops back to level 0 for the "You Win" restart.
+				next_i = g.gs.current_level_index == num_levels - 1 ? 0 : g.gs.current_level_index + 1
+			}
+			swap_to_level(next_i)
+			g.gs.num_keys_crab_has = 0
+			g.gs.elapsed_time      = 0
+			g.gs.move_state        = .Idle
+			g.gs.current_direction = .None
+			g.gs.queued_direction  = .None
+		}
+	} else {
+		g.gs.elapsed_time += rl.GetFrameTime()
+	}
 
 	{ // editor stuff
 		mouse_screen := rl.GetMousePosition()
@@ -481,17 +550,17 @@ update :: proc() {
 		enter_rearrange_mode_key := rl.KeyboardKey.Z
 		enter_rearrange_mode_button := rl.GamepadButton.RIGHT_TRIGGER_1
 
-		
+
 		if IsKeyPressed(enter_rearrange_mode_key) || IsGamepadButtonPressed(0, enter_rearrange_mode_button) {
 			g.gs.is_rearranging_chunks = true
 			g.gs.zoom_timer = zoom_timer_duration_sec
 		}
-		
+
 		if IsKeyReleased(enter_rearrange_mode_key) || IsGamepadButtonReleased(0, enter_rearrange_mode_button) {
 			g.gs.is_rearranging_chunks = false
 			g.gs.zoom_timer = zoom_timer_duration_sec
 		}
-		
+
 
 		crab_wpos : = tilemap_pos_to_world_pos(tilemap, g.gs.crab)
 
@@ -580,17 +649,21 @@ update :: proc() {
 	update_crab()
 	update_raccoon()
 
-	if g.gs.raccoon_active &&
+	if !g.gs.game_over && !g.gs.level_complete &&
+	   g.gs.raccoon_active &&
 	   tilemap_pos_absolute_tile(g.gs.crab) == tilemap_pos_absolute_tile(g.gs.raccoon) {
 		// TODO: swap to a dedicated raccoon-hit sfx once the asset lands.
 		play_sound_by_name("smack")
-		swap_to_level(g.gs.current_level_index)
-		g.gs.num_keys_crab_has = 0
-		g.gs.elapsed_time      = 0
-		g.gs.move_state        = .Idle
-		g.gs.current_direction = .None
-		g.gs.queued_direction  = .None
-		return
+		g.gs.game_over  = true
+		g.gs.move_state = .Idle
+	}
+
+	if !g.gs.game_over && !g.gs.level_complete { // crab reached the flag
+		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
+		if tilemap_get_tile_val(&g.gs.level.tilemap, crab_tile.x, crab_tile.y) == .Flag {
+			g.gs.level_complete = true
+			g.gs.move_state     = .Idle
+		}
 	}
 
 	{ // crab get key
@@ -816,7 +889,7 @@ update :: proc() {
 			rl.DrawTextureV(g.move_crab_sticker_texture, [2]f32{-600, -100}, rl.WHITE)
 		}
 	}
-	
+
 	if g.gs.raccoon_active { // DRAW RACCOON
 		// TODO: switch to animated frames when coon walk-cycle assets land.
 		tex := g.coon_texture
@@ -832,6 +905,39 @@ update :: proc() {
 		rl.DrawLineV({-5, 0}, {5, 0}, rl.YELLOW)
 		rl.DrawLineV({0, -5}, {0, 5}, rl.YELLOW)
 	}
+
+	if g.gs.current_level_index == 0 {
+		lc_text : cstring = "Lost crab"
+    	lc_font_size : f32 = 64
+    	lc_spacing   : f32 = 2
+    	lc_size := rl.MeasureTextEx(g.lcd_font, lc_text, lc_font_size, lc_spacing)
+    	lc_pos := [2]f32{
+        	g.gs.camera_target.x - lc_size.x * 0.5,
+            -350,
+        }
+		rl.DrawTextEx(g.lcd_font, lc_text, lc_pos, lc_font_size, lc_spacing, PALETTE_4)
+
+		text : cstring = "in the"
+    	font_size : f32 = 32
+    	spacing   : f32 = 2
+    	size := rl.MeasureTextEx(g.lcd_font, text, font_size, spacing)
+    	pos := [2]f32{
+        	g.gs.camera_target.x - size.x * 0.5,
+            -280,
+        }
+		rl.DrawTextEx(g.lcd_font, text, pos, font_size, spacing, PALETTE_4)
+
+		sub_text : cstring = "Great Sand Labyrnith"
+    	sub_font_size : f32 = 56
+    	sub_spacing   : f32 = 2
+    	sub_size := rl.MeasureTextEx(g.lcd_font, sub_text, sub_font_size, sub_spacing)
+    	sub_pos := [2]f32{
+    	g.gs.camera_target.x - sub_size.x * 0.5,
+            -242,
+        }
+		rl.DrawTextEx(g.lcd_font, sub_text, sub_pos, sub_font_size, sub_spacing, PALETTE_4)
+	}
+
 	rl.EndMode2D()
 
 	{ // instructions and ui guide stuff outside of camera
@@ -861,12 +967,17 @@ update :: proc() {
 		2,
 		PALETTE_4,
 	)
-	if g.gs.current_level_index == 0 {
-		texWidth := f32(g.render_texture.texture.width / 2)
-		texHeight := f32(g.render_texture.texture.height)
-		rl.DrawTextEx(g.lcd_font, "Lost crab in the great sand labyrinth", {texWidth/2,10}, 64, 2, PALETTE_4)
-	}
 
+	if g.gs.game_over {
+		draw_popup("Coon got ya", "", "Hit A to play again")
+	} else if g.gs.level_complete {
+		time_str := fmt.ctprintf("%02d:%02d", minutes, seconds)
+		if g.gs.current_level_index == num_levels - 1 {
+			draw_popup("You Win", time_str, "Hit A to play again")
+		} else {
+			draw_popup("Level Complete", time_str, "Hit A to continue")
+		}
+	}
 
 	rl.EndTextureMode()
 

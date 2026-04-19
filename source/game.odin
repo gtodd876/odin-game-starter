@@ -107,6 +107,8 @@ Game_State :: struct {
 	raccoon_direction: Direction,
 	raccoon_move_speed: f32,
 	raccoon_active: bool,
+	game_over: bool,
+	level_complete: bool,
 }
 
 raccoon_level_index :: 4
