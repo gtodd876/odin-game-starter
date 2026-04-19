@@ -96,6 +96,7 @@ Game_State :: struct {
 	player_tile: [2]int,
 	is_rearranging_chunks : bool,
 	zoom_timer : f32,
+	swap_selection_change_timer : f32,
 	camera_zoom : f32,
 	camera_target : [2]f32,
 	crab: Tilemap_Pos,
@@ -142,6 +143,11 @@ Game_Memory :: struct {
 	move_crab_sticker_texture : rl.Texture2D,
 	a_button_panel_texture : rl.Texture2D,
 	right_bumper_hold_panel_texture : rl.Texture2D,
+	right_bumper_release_panel_texture : rl.Texture2D,
+	a_button_select_texture : rl.Texture2D,
+	a_button_swap_texture : rl.Texture2D,
+	dpad_move_selection_texture : rl.Texture2D,
+	dpad_crab_walk_texture : rl.Texture2D,
 	lcd_font: rl.Font,
 }
 
@@ -262,6 +268,13 @@ game_init :: proc() {
 	g.coon_texture = rl.LoadTexture("assets/coon.png")
 	g.move_crab_sticker_texture = rl.LoadTexture("assets/move_crab_sticker.png")
 	g.a_button_panel_texture = rl.LoadTexture("assets/a_button_panel.png")
+	g.right_bumper_hold_panel_texture = rl.LoadTexture("assets/right_bumper_hold_panel.png")
+	g.right_bumper_release_panel_texture = rl.LoadTexture("assets/right_bumper_release_panel.png")
+
+	g.a_button_select_texture = rl.LoadTexture("assets/a_button_select.png")
+	g.a_button_swap_texture = rl.LoadTexture("assets/a_button_swap.png")
+	g.dpad_move_selection_texture = rl.LoadTexture("assets/dpad_move_selection.png")
+	g.dpad_crab_walk_texture = rl.LoadTexture("assets/dpad_crab_walk.png")
 
 	g.lcd_font = rl.LoadFontEx("assets/fonts/LCD2B.TTF", 72, nil, 0)
 	rl.SetTextureFilter(g.lcd_font.texture, .POINT)

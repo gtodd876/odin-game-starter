@@ -91,6 +91,8 @@ swap_to_level :: proc(i: int) {
 	// g.levels[g.gs.current_level_index] = g.initial_current_level
 	// g.gs.level = g.levels[i]
 	// g.gs.crab = g.gs.level.crab_start_pos
+
+	g.gs.num_keys_crab_has = 0
 }
 
 spawn_raccoon_opposite_crab :: proc() {
@@ -489,6 +491,7 @@ update :: proc() {
 		
 		if IsKeyReleased(enter_rearrange_mode_key) || IsGamepadButtonReleased(0, enter_rearrange_mode_button) {
 			g.gs.is_rearranging_chunks = false
+			g.gs.is_chunk_selection_active = false
 			g.gs.zoom_timer = zoom_timer_duration_sec
 		}
 		
@@ -514,31 +517,38 @@ update :: proc() {
 				g.gs.camera_target = crab_wpos
 			}
 		}
+
+		if g.gs.swap_selection_change_timer > 0 {
+			g.gs.swap_selection_change_timer -= rl.GetFrameTime()
+			if g.gs.swap_selection_change_timer < 0 do g.gs.swap_selection_change_timer = 0
+		}
 	}
 
 	if g.gs.is_rearranging_chunks {
-		if IsKeyPressed(.UP)    {
+		if IsKeyPressed(.UP) || IsGamepadButtonPressed(0, .LEFT_FACE_UP) {
 			play_sound_by_name("ui-move-1")
 			g.gs.hovered_chunk.y -= 1
 		}
-		if IsKeyPressed(.DOWN)  {
+		if IsKeyPressed(.DOWN) || IsGamepadButtonPressed(0, .LEFT_FACE_DOWN) {
 			play_sound_by_name("ui-move-1")
 
 			g.gs.hovered_chunk.y += 1
 		}
-		if IsKeyPressed(.LEFT)  {
+		if IsKeyPressed(.LEFT) || IsGamepadButtonPressed(0, .LEFT_FACE_LEFT) {
 			play_sound_by_name("ui-move-1")
 
 			g.gs.hovered_chunk.x -= 1
 		}
-		if IsKeyPressed(.RIGHT) {
+		if IsKeyPressed(.RIGHT) || IsGamepadButtonPressed(0, .LEFT_FACE_RIGHT) {
 			play_sound_by_name("ui-move-1")
 
 			g.gs.hovered_chunk.x += 1
 		}
 
-		if IsKeyPressed(.SPACE) {
+		if IsKeyPressed(.SPACE) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) {
 			if g.gs.is_chunk_selection_active {
+				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
+				
 				play_sound_by_name("smack")
 				hovered_tiles := tilemap_get_chunk_tiles(tilemap,
 					g.gs.hovered_chunk.x, g.gs.hovered_chunk.y)
@@ -559,6 +569,7 @@ update :: proc() {
 				g.gs.is_chunk_selection_active = false
 			} else {
 				play_sound_by_name("put-chunk")
+				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
 				g.gs.is_chunk_selection_active = true
 				g.gs.selected_chunk = g.gs.hovered_chunk
 			}
@@ -811,11 +822,11 @@ update :: proc() {
 		rl.DrawCircleV(crab_wpos, 4, rl.RED)
 	}
 
-	{ // instructions and ui guide stuff in camera
-		if g.gs.current_level_index == 0 {
-			rl.DrawTextureV(g.move_crab_sticker_texture, [2]f32{-600, -100}, rl.WHITE)
-		}
-	}
+	// { // instructions and ui guide stuff in camera
+	// 	if g.gs.current_level_index == 0 {
+	// 		rl.DrawTextureV(g.move_crab_sticker_texture, [2]f32{-600, -100}, rl.WHITE)
+	// 	}
+	// }
 	
 	if g.gs.raccoon_active { // DRAW RACCOON
 		// TODO: switch to animated frames when coon walk-cycle assets land.
@@ -832,11 +843,108 @@ update :: proc() {
 		rl.DrawLineV({-5, 0}, {5, 0}, rl.YELLOW)
 		rl.DrawLineV({0, -5}, {0, 5}, rl.YELLOW)
 	}
+
 	rl.EndMode2D()
 
 	{ // instructions and ui guide stuff outside of camera
-		if g.gs.current_level_index == 2 {
-			rl.DrawTextureV(g.a_button_panel_texture, [2]f32{10, 200}, rl.WHITE)
+		// if g.gs.current_level_index == 2 {
+		// 	rl.DrawTextureV(g.a_button_panel_texture, [2]f32{10, 200}, rl.WHITE)
+		// }
+
+		if g.gs.current_level_index >= 2 {
+			hidden_pos :=  [2]f32{
+				f32(g.render_texture.texture.width) + 100, 10
+			}
+			visible_pos := [2]f32{
+				f32(g.render_texture.texture.width) - 150, 10
+			}
+
+			dpad_hidden_pos := hidden_pos
+			dpad_hidden_pos.y += 200
+			dpad_visible_pos := visible_pos
+			dpad_visible_pos.y += 200
+
+			a_visible_pos := visible_pos
+			a_hidden_pos := hidden_pos
+			a_visible_pos.y += 430
+			a_hidden_pos.y += 430
+
+
+			hold_tex := g.right_bumper_hold_panel_texture
+			release_tex := g.right_bumper_release_panel_texture
+			dpad_tex := g.dpad_move_selection_texture
+			dpad_crab_walk_tex := g.dpad_crab_walk_texture
+			a_select_tex := g.a_button_select_texture
+			a_swap_tex := g.a_button_swap_texture
+
+			p := 1.0 - ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
+			p_inverse := ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
+			
+			a_p := 1.0 - ((g.gs.swap_selection_change_timer / zoom_timer_duration_sec)*(g.gs.swap_selection_change_timer / zoom_timer_duration_sec))*(g.gs.swap_selection_change_timer / zoom_timer_duration_sec)
+
+			hold_tex_pos := [2]f32{}
+			release_tex_pos := [2]f32{}
+			dpad_tex_pos := [2]f32 {}
+			dpad_crab_walk_tex_pos := [2]f32{}
+			a_select_tex_pos := [2]f32{}
+			a_swap_tex_pos := [2]f32{}
+
+			if g.gs.is_rearranging_chunks {
+				hold_tex_p := p
+				release_tex_p := p_inverse
+
+				hold_tex_pos = linalg.lerp(visible_pos, hidden_pos, p)
+				dpad_tex_pos = linalg.lerp(dpad_hidden_pos, dpad_visible_pos, p)
+				dpad_crab_walk_tex_pos = linalg.lerp(dpad_visible_pos, dpad_hidden_pos, p)
+
+				release_tex_pos = linalg.lerp(hidden_pos, visible_pos, p)
+
+				a_select_tex_pos = linalg.lerp(a_hidden_pos, a_visible_pos, p)
+
+				if g.gs.is_chunk_selection_active {
+					a_select_tex_pos = linalg.lerp(a_visible_pos, a_hidden_pos, a_p)
+					a_swap_tex_pos = linalg.lerp(a_hidden_pos, a_visible_pos, a_p)
+				} else {
+					if g.gs.swap_selection_change_timer > 0 {
+						a_select_tex_pos = linalg.lerp(a_hidden_pos, a_visible_pos, a_p)
+					}
+					a_swap_tex_pos = linalg.lerp(a_visible_pos, a_hidden_pos, a_p)
+				}
+			} else {
+				hold_tex_p := p_inverse
+				release_tex_p := p
+
+				release_tex_pos = linalg.lerp(visible_pos, hidden_pos, p)
+				hold_tex_pos = linalg.lerp(hidden_pos, visible_pos, p)
+
+				dpad_tex_pos = linalg.lerp(dpad_visible_pos, dpad_hidden_pos,  p)
+
+				dpad_crab_walk_tex_pos = linalg.lerp(dpad_hidden_pos, dpad_visible_pos, p)
+
+				a_select_tex_pos = linalg.lerp(a_visible_pos, a_hidden_pos, p)
+
+				if g.gs.is_chunk_selection_active {
+					a_swap_tex_pos = linalg.lerp(a_visible_pos, a_hidden_pos, p)
+				} else {
+					a_swap_tex_pos = a_hidden_pos
+				}
+			}
+
+			rl.DrawTextureEx(hold_tex, hold_tex_pos, {}, 0.5, rl.WHITE)
+			rl.DrawTextureEx(release_tex, release_tex_pos,  {}, 0.5, rl.WHITE)
+			rl.DrawTextureEx(dpad_tex, dpad_tex_pos, {}, 0.6, rl.WHITE)
+			rl.DrawTextureEx(a_select_tex, a_select_tex_pos, {}, 0.6, rl.WHITE)
+			rl.DrawTextureEx(a_swap_tex, a_swap_tex_pos, {}, 0.6, rl.WHITE)
+			rl.DrawTextureEx(dpad_crab_walk_tex, dpad_crab_walk_tex_pos, {}, 0.6, rl.WHITE)
+		} else {
+			dpad_crab_walk_tex := g.dpad_crab_walk_texture
+
+
+			visible_pos := [2]f32{
+				f32(g.render_texture.texture.width) - 150, 10
+			}
+			rl.DrawTextureEx(dpad_crab_walk_tex, visible_pos, {}, 0.6, rl.WHITE)
+
 		}
 	}
 
@@ -861,6 +969,7 @@ update :: proc() {
 		2,
 		PALETTE_4,
 	)
+
 	if g.gs.current_level_index == 0 {
 		texWidth := f32(g.render_texture.texture.width / 2)
 		texHeight := f32(g.render_texture.texture.height)
