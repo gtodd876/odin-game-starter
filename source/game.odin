@@ -367,8 +367,8 @@ game_init :: proc() {
 	// g.levels[6] = g.levels[7]
 	// g.levels[7] = tmp
 	
-	g.levels[9] = {}
-	g.levels[9].tilemap = init_tilemap_by_specifying_chunks(5, 5)
+	// g.levels[9] = {}
+	// g.levels[9].tilemap = init_tilemap_by_specifying_chunks(5, 5)
 	game_hot_reloaded(g)
 }
 
