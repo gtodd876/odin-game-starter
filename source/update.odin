@@ -543,7 +543,7 @@ update :: proc() {
 		g.run = false
 	}
 
-	if rl.IsKeyPressed(.F10) do t_save_data()
+	// if rl.IsKeyPressed(.F10) do t_save_data()
 
 	{ // swap levels
 		level_keys := [?] rl.KeyboardKey {
@@ -574,10 +574,14 @@ update :: proc() {
 		}
 	}
 
-	load_button := rl.KeyboardKey.F11
-	if rl.IsKeyPressed(load_button) {
-		t_load_data(context.temp_allocator)
+	if rl.IsKeyPressed(.F11) {
+		toggle_fullscreen()
 	}
+
+	// load_button := rl.KeyboardKey.F11
+	// if rl.IsKeyPressed(load_button) {
+	// 	t_load_data(context.temp_allocator)
+	// }
 
 	if g.debug.paused do return
 

@@ -255,7 +255,29 @@ draw_debug_overlay :: proc() {
 	}
 }
 
+toggle_fullscreen :: proc() {
+	when ODIN_OS == .Darwin {
+		return // we only support fullscreen using maximize button on mac
+	}
 
+
+	WindowFlags :: rl.ConfigFlags { .VSYNC_HINT }
+	
+	is_window_borderless := rl.IsWindowState({.BORDERLESS_WINDOWED_MODE})
+	if is_window_borderless {
+		rl.ClearWindowState({.BORDERLESS_WINDOWED_MODE})
+		rl.SetWindowState(WindowFlags + { .WINDOW_RESIZABLE} )
+		rl.SetWindowSize(1280, 720)
+		rl.ShowCursor()
+	} else {
+		w := rl.GetMonitorWidth(rl.GetCurrentMonitor())
+		h := rl.GetMonitorHeight(rl.GetCurrentMonitor())
+		rl.ClearWindowState({ .WINDOW_RESIZABLE })
+		rl.ToggleBorderlessWindowed()
+		// rl.ToggleFullscreen()
+		rl.SetWindowSize(w, h)
+	}
+}
 
 
 @(export)
