@@ -225,6 +225,17 @@ crab_absolute_tile :: proc(cp: Crab_Pos) -> [2]int {
 	}
 }
 
+crab_pos_from_absolute_tile ::proc(tile_x, tile_y :int) -> Crab_Pos {
+	ret := Crab_Pos {
+        chunk   = [2]int{tile_x / chunk_width, tile_y / chunk_height},
+        rel_pos = [2]f32{
+            f32(tile_x % chunk_width)  + 0.5,
+            f32(tile_y % chunk_height) + 0.5,
+        },
+    }
+    return ret
+}
+
 // Wrap rel_pos into [0, chunk_w) x [0, chunk_h), shifting chunk to compensate.
 crab_normalize_chunk :: proc(cp: ^Crab_Pos) {
 	for cp.rel_pos.x >= chunk_width_f  { cp.chunk.x += 1; cp.rel_pos.x -= chunk_width_f  }
@@ -417,11 +428,21 @@ update :: proc() {
 		mouse_rel_tilemap := mouse_world - tilemap_world_origin(tilemap)
 		tile_x := int(mouse_rel_tilemap.x) / tile_size
 		tile_y := int(mouse_rel_tilemap.y) / tile_size
-		if (rl.IsMouseButtonDown(.LEFT)) {
-			tilemap_set_tile(tilemap, tile_x, tile_y, g.editor_selected_tile_type)
-		} else if rl.IsMouseButtonDown(.RIGHT) {
-			tilemap_set_tile(tilemap, tile_x, tile_y, .Trail)	
+
+		place_crab_mod_key := rl.KeyboardKey.C
+		if !rl.IsKeyDown(place_crab_mod_key) {
+			if (rl.IsMouseButtonDown(.LEFT)) {
+				tilemap_set_tile(tilemap, tile_x, tile_y, g.editor_selected_tile_type)
+			} else if rl.IsMouseButtonDown(.RIGHT) {
+				tilemap_set_tile(tilemap, tile_x, tile_y, .Trail)	
+			}
+		} else {
+			// NOTE(john) Only works when zoomed out
+			if (rl.IsMouseButtonPressed(.LEFT)) {
+				g.gs.crab = crab_pos_from_absolute_tile(tile_x, tile_y)
+			}
 		}
+		
 	}
 
 	{
@@ -704,6 +725,9 @@ update :: proc() {
 			key_wpos := crab_wpos + space_from_crab + (f32(key_index)*space_from_last_key)
 			rl.DrawTextureV(g.key_texture, key_wpos, rl.WHITE)
 		}
+
+		crab_wpos := crab_world_pos(&g.gs.tilemap, g.gs.crab)
+		rl.DrawCircleV(crab_wpos, 4, rl.RED)
 	}
 
 	if g.debug.debug_draw {
