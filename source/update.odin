@@ -368,6 +368,7 @@ update_crab :: proc() {
 	gs.queued_direction = .None
 
 	if !turned {
+		try_open_adjacent_lock(t, gs.crab, gs.current_direction)
 		if !crab_can_step(t, gs.crab, gs.current_direction) {
 			// Stop at the crossed center.
 			gs.current_direction = .None
