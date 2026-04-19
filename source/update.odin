@@ -625,6 +625,11 @@ update :: proc() {
 		if IsGamepadButtonPressed(0, .LEFT_TRIGGER_1) {
 			if g.gs.is_rearranging_chunks {
 				g.gs.is_chunk_selection_active = false
+				rl.ResumeMusicStream(g.drone_music)
+				rl.PauseMusicStream(g.dingdings_music)
+			} else {
+				rl.PauseMusicStream(g.drone_music)
+				rl.ResumeMusicStream(g.dingdings_music)
 			}
 			g.gs.is_rearranging_chunks = !g.gs.is_rearranging_chunks
 			g.gs.zoom_timer = zoom_timer_duration_sec
