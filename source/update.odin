@@ -657,6 +657,23 @@ update :: proc() {
 	// freed at end-of-frame by the host in main_hot_reload.odin /
 	// main_release.odin / main_web_entry.odin.
 
+	hud_rect := rl.Rectangle{ 8, 8, f32(g.render_texture.texture.width) / 6, 120 }
+	rl.DrawRectangleRounded       (hud_rect, 0.15, 8,    PALETTE_1)
+	rl.DrawRectangleRoundedLinesEx(hud_rect, 0.15, 8, 3, PALETTE_4)
+
+	minutes := int(g.gs.elapsed_time) / 60
+	seconds := int(g.gs.elapsed_time) % 60
+
+	rl.DrawTextEx(g.lcd_font, "TIME", {20, 12}, 40, 2, PALETTE_4)
+	rl.DrawTextEx(
+		g.lcd_font,
+		fmt.ctprintf("%02d:%02d", minutes, seconds),
+		{20, 52},
+		72,
+		2,
+		PALETTE_4,
+	)
+
 	rl.EndTextureMode()
 
 
@@ -664,7 +681,7 @@ update :: proc() {
 		rl.BeginDrawing()
 		defer rl.EndDrawing()
 
-		rl.ClearBackground(PALETTE_1)
+		rl.ClearBackground(rl.BLACK)
 
 		screen_width := f32(rl.GetScreenWidth())
 		screen_height := f32(rl.GetScreenHeight())
@@ -685,22 +702,7 @@ update :: proc() {
 		}
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
 
-		hud_rect := rl.Rectangle{ 8, 8, screen_width / 6, 120 }
-		rl.DrawRectangleRounded       (hud_rect, 0.15, 8,    PALETTE_1)
-		rl.DrawRectangleRoundedLinesEx(hud_rect, 0.15, 8, 3, PALETTE_4)
-
-		minutes := int(g.gs.elapsed_time) / 60
-		seconds := int(g.gs.elapsed_time) % 60
-
-		rl.DrawTextEx(g.lcd_font, "TIME", {20, 12}, 40, 2, PALETTE_4)
-		rl.DrawTextEx(
-			g.lcd_font,
-			fmt.ctprintf("%02d:%02d", minutes, seconds),
-			{20, 52},
-			72,
-			2,
-			PALETTE_4,
-		)
+		
 
 		draw_debug_overlay()
 

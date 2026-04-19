@@ -328,7 +328,7 @@ game_init :: proc() {
 
 	swap_to_level(0)
 
-	// g.levels[1].tilemap = init_tilemap_by_specifying_chunks(1, 1)
+	g.levels[2].tilemap = init_tilemap_by_specifying_chunks(2, 1)
 
 
 	game_hot_reloaded(g)
