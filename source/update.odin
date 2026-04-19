@@ -137,6 +137,7 @@ swap_to_level :: proc(i: int) {
 
 	g.gs.game_over      = false
 	g.gs.level_complete = false
+	g.gs.raccoon_spawn_delay = raccoon_spawn_delay_duration
 
 	rl.ResumeMusicStream(g.drone_music)
 
@@ -387,10 +388,15 @@ blinky_pick_direction :: proc(t: ^Tilemap, from: Tilemap_Pos, target: [2]int, cu
 }
 
 update_raccoon :: proc() {
+	if g.gs.game_over || g.gs.level_complete do return
+
+	if g.gs.raccoon_spawn_delay > 0 {
+		g.gs.raccoon_spawn_delay -= rl.GetFrameTime()
+		return
+	}
+
 	for &raccoon in g.gs.raccoon_pool {
 		if !raccoon.active do continue
-
-		if g.gs.game_over || g.gs.level_complete do return
 
 		gs := &g.gs
 		t  := &gs.level.tilemap
@@ -1017,15 +1023,18 @@ update :: proc() {
 		}
 	}
 	
+	raccoon_frame := 0
+	if g.gs.raccoon_spawn_delay <= 0 {
+		raccoon_frame = int(g.gs.elapsed_time * raccoon_anim_fps) %% raccoon_anim_frames
+	}
+	raccoon_tex := g.raccoon_walk_textures[raccoon_frame]
 	for raccoon in g.gs.raccoon_pool {
 		if raccoon.active { // DRAW RACCOON
-			// TODO: switch to animated frames when coon walk-cycle assets land.
-			tex := g.coon_texture
 			raccoon_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, raccoon.pos)
-			src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
+			src := rl.Rectangle{0, 0, f32(raccoon_tex.width), f32(raccoon_tex.height)}
 			dst := rl.Rectangle{raccoon_wpos.x, raccoon_wpos.y, tile_size_f, tile_size_f}
 			origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
-			rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
+			rl.DrawTexturePro(raccoon_tex, src, dst, origin, 0, rl.WHITE)
 		}
 	}
 
