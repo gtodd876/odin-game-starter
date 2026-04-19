@@ -39,75 +39,6 @@ game_update :: proc() {
 	free_all(context.temp_allocator)
 }
 
-tilemap_is_coord_in_bounds :: proc(tilemap : ^Tilemap, x, y : int) -> bool {
-	in_bounds := x >= 0 && x < tilemap.width &&
-		y >= 0 && y < tilemap.height
-	return in_bounds
-}
-
-tilemap_set_tile :: proc(tilemap : ^Tilemap, x, y : int, val : Tile_Type) {
-	in_bounds := tilemap_is_coord_in_bounds(tilemap, x, y)
-
-	if in_bounds {
-		tilemap.tiles[(y*tilemap.width)+x] = val
-	} else {
-		// Why are u here?
-		when ODIN_DEBUG {
-			intrinsics.debug_trap()
-		}
-	}
-}
-
-tilemap_get_tile_val ::proc(tilemap :^Tilemap, x, y : int) -> Tile_Type {
-	in_bounds := tilemap_is_coord_in_bounds(tilemap, x, y)
-	val := Tile_Type.Trail
-	if in_bounds {
-		val = tilemap.tiles[(y*tilemap.width)+x]
-	} else {
-	}
-	return val
-}
-
-set_chunk_tiles_in_tilemap :: proc(tilemap : ^Tilemap, chunk_x, chunk_y : int, tiles:[]Tile_Type) {
-	min_tile_x := chunk_x * chunk_width
-	min_tile_y := chunk_y * chunk_height
-	max_tile_x := min_tile_x + chunk_width
-	max_tile_y := min_tile_y + chunk_height
-
-	for tile_x, i_x in min_tile_x..<max_tile_x {
-		for tile_y, i_y in min_tile_y..<max_tile_y {
-			tile_val := tiles[(i_y*chunk_width)+i_x]
-			tilemap_set_tile(tilemap, tile_x, tile_y, tile_val)
-		}
-	}
-
-}
-
-init_tilemap_by_specifying_chunks :: proc(num_chunks_x, num_chunks_y : int) -> Tilemap {
-	tilemap := Tilemap {
-		width = num_chunks_x * chunk_width,
-		height = num_chunks_y * chunk_height,
-		num_chunks_x = num_chunks_x,
-		num_chunks_y = num_chunks_y
-	}
-	return tilemap
-}
-
-tilemap_get_chunk_tiles ::proc(tilemap : ^Tilemap, chunk_x, chunk_y : int) -> [tiles_in_chunk]Tile_Type {
-	tilemap_chunk := [tiles_in_chunk]Tile_Type{}
-	min_tile_x := chunk_x * chunk_width
-	min_tile_y := chunk_y * chunk_height
-	max_tile_x := min_tile_x + chunk_width
-	max_tile_y := min_tile_y + chunk_height
-
-	for tile_x, i_x in min_tile_x..<max_tile_x {
-		for tile_y, i_y in min_tile_y..<max_tile_y {
-			tile_val := tilemap.tiles[(tile_y*tilemap.width)+tile_x]
-			tilemap_chunk[(i_y*chunk_width)+i_x] = tile_val
-		}
-	}
-	return tilemap_chunk
-}
 
 data_file_filename :: "data"
 
@@ -210,7 +141,7 @@ chunk_world_origin :: proc(t: ^Tilemap, chunk_x, chunk_y: int) -> [2]f32 {
 	}
 }
 
-crab_world_pos :: proc(t: ^Tilemap, cp: Crab_Pos) -> [2]f32 {
+tilemap_pos_to_world_pos :: proc(t: ^Tilemap, cp: Tilemap_Pos) -> [2]f32 {
 	co := chunk_world_origin(t, cp.chunk.x, cp.chunk.y)
 	return {
 		co.x + cp.rel_pos.x * tile_size_f,
@@ -218,15 +149,15 @@ crab_world_pos :: proc(t: ^Tilemap, cp: Crab_Pos) -> [2]f32 {
 	}
 }
 
-crab_absolute_tile :: proc(cp: Crab_Pos) -> [2]int {
+tilemap_pos_absolute_tile :: proc(cp: Tilemap_Pos) -> [2]int {
 	return {
 		cp.chunk.x * chunk_width  + int(cp.rel_pos.x),
 		cp.chunk.y * chunk_height + int(cp.rel_pos.y),
 	}
 }
 
-crab_pos_from_absolute_tile ::proc(tile_x, tile_y :int) -> Crab_Pos {
-	ret := Crab_Pos {
+absolute_tile_to_tilemap_pos ::proc(tile_x, tile_y :int) -> Tilemap_Pos {
+	ret := Tilemap_Pos {
         chunk   = [2]int{tile_x / chunk_width, tile_y / chunk_height},
         rel_pos = [2]f32{
             f32(tile_x % chunk_width)  + 0.5,
@@ -237,14 +168,14 @@ crab_pos_from_absolute_tile ::proc(tile_x, tile_y :int) -> Crab_Pos {
 }
 
 // Wrap rel_pos into [0, chunk_w) x [0, chunk_h), shifting chunk to compensate.
-crab_normalize_chunk :: proc(cp: ^Crab_Pos) {
+tilemap_pos_normalize_chunk :: proc(cp: ^Tilemap_Pos) {
 	for cp.rel_pos.x >= chunk_width_f  { cp.chunk.x += 1; cp.rel_pos.x -= chunk_width_f  }
 	for cp.rel_pos.x < 0               { cp.chunk.x -= 1; cp.rel_pos.x += chunk_width_f  }
 	for cp.rel_pos.y >= chunk_height_f { cp.chunk.y += 1; cp.rel_pos.y -= chunk_height_f }
 	for cp.rel_pos.y < 0               { cp.chunk.y -= 1; cp.rel_pos.y += chunk_height_f }
 }
 
-crab_can_step :: proc(t: ^Tilemap, cp: Crab_Pos, dir: Direction) -> bool {
+crab_can_step :: proc(t: ^Tilemap, cp: Tilemap_Pos, dir: Direction) -> bool {
 	if dir == .None do return false
 	step := direction_vector(dir)
 	probe_chunk := cp.chunk
@@ -265,8 +196,8 @@ update_crab :: proc() {
 
 	// Refresh derived state on the way out: wrap rel_pos/chunk, then world pos.
 	defer {
-		crab_normalize_chunk(&gs.crab)
-		gs.player_pos = crab_world_pos(t, gs.crab)
+		tilemap_pos_normalize_chunk(&gs.crab)
+		gs.player_pos = tilemap_pos_to_world_pos(t, gs.crab)
 	}
 
 	// 1. Latest WASD press sets queued direction.
@@ -340,7 +271,7 @@ update_crab :: proc() {
 	saved_rel   := gs.crab.rel_pos
 	saved_chunk := gs.crab.chunk
 	gs.crab.rel_pos = {crossed_cx, crossed_cy}
-	crab_normalize_chunk(&gs.crab)
+	tilemap_pos_normalize_chunk(&gs.crab)
 
 	turned := false
 	if gs.queued_direction != .None && gs.queued_direction != gs.current_direction {
@@ -439,7 +370,7 @@ update :: proc() {
 		} else {
 			// NOTE(john) Only works when zoomed out
 			if (rl.IsMouseButtonPressed(.LEFT)) {
-				g.gs.crab = crab_pos_from_absolute_tile(tile_x, tile_y)
+				g.gs.crab = absolute_tile_to_tilemap_pos(tile_x, tile_y)
 			}
 		}
 		
@@ -452,7 +383,7 @@ update :: proc() {
 			g.gs.zoom_timer = zoom_timer_duration_sec
 		}
 
-		crab_wpos : = crab_world_pos(tilemap, g.gs.crab)
+		crab_wpos : = tilemap_pos_to_world_pos(tilemap, g.gs.crab)
 
 
 		if g.gs.zoom_timer > 0 {
@@ -513,7 +444,7 @@ update :: proc() {
 				} else if g.gs.crab.chunk == g.gs.selected_chunk {
 					g.gs.crab.chunk = g.gs.hovered_chunk
 				}
-				g.gs.player_pos = crab_world_pos(tilemap, g.gs.crab)
+				g.gs.player_pos = tilemap_pos_to_world_pos(tilemap, g.gs.crab)
 
 				g.gs.is_chunk_selection_active = false
 			} else {
@@ -539,7 +470,7 @@ update :: proc() {
 	update_crab()
 
 	{ // crab get key
-		crab_tile := crab_absolute_tile(g.gs.crab)
+		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
 		tile_type_that_crab_on := tilemap_get_tile_val(&g.gs.tilemap, 
 			crab_tile.x, crab_tile.y)
 		crab_on_a_key := tile_type_that_crab_on == .Key
@@ -550,7 +481,7 @@ update :: proc() {
 	}
 
 	{ // crab make lock go away
-		crab_next_tile := crab_absolute_tile(g.gs.crab)
+		crab_next_tile := tilemap_pos_absolute_tile(g.gs.crab)
 		switch g.gs.current_direction {
 			case .Up: {
 				crab_next_tile.y -= 1
@@ -719,14 +650,14 @@ update :: proc() {
 		rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
 
 		for key_index in 0..<g.gs.num_keys_crab_has {
-			crab_wpos := crab_world_pos(&g.gs.tilemap, g.gs.crab)
+			crab_wpos := tilemap_pos_to_world_pos(&g.gs.tilemap, g.gs.crab)
 			space_from_crab := [2]f32{-16, -64}
 			space_from_last_key := [2]f32{10,-10}
 			key_wpos := crab_wpos + space_from_crab + (f32(key_index)*space_from_last_key)
 			rl.DrawTextureV(g.key_texture, key_wpos, rl.WHITE)
 		}
 
-		crab_wpos := crab_world_pos(&g.gs.tilemap, g.gs.crab)
+		crab_wpos := tilemap_pos_to_world_pos(&g.gs.tilemap, g.gs.crab)
 		rl.DrawCircleV(crab_wpos, 4, rl.RED)
 	}
 
