@@ -103,7 +103,6 @@ spawn_raccoon_opposite_crab :: proc() {
 
 	g.gs.raccoon = absolute_tile_to_tilemap_pos(found_x, found_y)
 	g.gs.raccoon_direction = .None
-	g.gs.raccoon_facing    = .Left
 	g.gs.raccoon_move_speed = 3.0
 }
 
@@ -339,7 +338,6 @@ update_raccoon :: proc() {
 		target := tilemap_pos_absolute_tile(gs.crab)
 		gs.raccoon_direction = blinky_pick_direction(t, gs.raccoon, target, .None)
 		if gs.raccoon_direction == .None do return
-		gs.raccoon_facing = gs.raccoon_direction
 	}
 
 	dv := direction_vector(gs.raccoon_direction)
@@ -394,7 +392,6 @@ update_raccoon :: proc() {
 	} else {
 		gs.raccoon_direction = next_dir
 	}
-	gs.raccoon_facing = gs.raccoon_direction
 }
 
 update :: proc() {
@@ -803,18 +800,11 @@ update :: proc() {
 	if g.gs.raccoon_active { // DRAW RACCOON
 		// TODO: switch to animated frames when coon walk-cycle assets land.
 		tex := g.coon_texture
-		rotation : f32 = 0
-		switch g.gs.raccoon_facing {
-		case .None, .Up: rotation = 0
-		case .Right:     rotation = 90
-		case .Down:      rotation = 180
-		case .Left:      rotation = 270
-		}
 		raccoon_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.raccoon)
 		src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
 		dst := rl.Rectangle{raccoon_wpos.x, raccoon_wpos.y, tile_size_f, tile_size_f}
 		origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
-		rl.DrawTexturePro(tex, src, dst, origin, rotation, rl.WHITE)
+		rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
 	}
 
 	if g.debug.debug_draw {
