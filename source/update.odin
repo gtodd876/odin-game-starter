@@ -941,13 +941,16 @@ update :: proc() {
 			}
 			color := PALETTE_3
 			color.a = 20
+			if g.gs.is_rearranging_chunks {
+				color.a = 200
+			}
 			rl.DrawRectangleLinesEx(chunk_rect, 4, color)
 			// Note(john) using term chunk id to refer to the 2D index
 			// which can really be thought of as an integer coordinate
 			// system
 			if g.gs.is_rearranging_chunks {
 				chunk_id := [2]int{chunk_x, chunk_y}
-					color := rl.BLACK
+				color := rl.BLACK
 
 				if g.gs.is_chunk_selection_active {
 					if chunk_id == g.gs.selected_chunk  {
