@@ -31,6 +31,7 @@ SERIALIZER_ENABLE_GENERIC :: #config(SERIALIZER_ENABLE_GENERIC, true)
 Serializer_Version :: enum u32le {
     initial = 0,
     add_crab_start_pos_to_level = 1,
+    add_raccoon_pool_to_level,
     LATEST_PLUS_ONE,
 }
 
@@ -399,6 +400,7 @@ when SERIALIZER_ENABLE_GENERIC {
         serialize_tilemap,
         serialize_level,
         serialize_tilemap_pos,
+        serialize_raccoon,
     }
 }
 
@@ -455,6 +457,25 @@ serialize_tilemap_pos :: proc(s : ^Serializer, tilemap_pos : ^Tilemap_Pos, loc :
 }
 
 
+serialize_raccoon :: proc(s : ^Serializer, r : ^Raccoon, loc := #caller_location) -> bool {
+    if s.is_writing {
+        s.version = SERIALIZER_VERSION_LATEST
+    }
+
+    serialize(s, &s.version, loc) or_return
+
+    if !s.is_writing && s.version > SERIALIZER_VERSION_LATEST {
+        fmt.printf("Unsupported version: %d\n", s.version);
+        return false;
+    }
+
+    serialize(s, &r.active, loc) or_return
+    serialize(s, &r.pos, loc) or_return
+    serialize(s, &r.direction, loc) or_return
+
+    return true
+}
+
 serialize_level :: proc(s : ^Serializer, level : ^Level, loc := #caller_location) -> bool {
     if s.is_writing {
         s.version = SERIALIZER_VERSION_LATEST
@@ -471,6 +492,10 @@ serialize_level :: proc(s : ^Serializer, level : ^Level, loc := #caller_location
 
     if s.version >= Serializer_Version.add_crab_start_pos_to_level {
         serialize(s, &level.crab_start_pos, loc) or_return
+    }
+
+    if s.version >= Serializer_Version.add_raccoon_pool_to_level {
+        serialize(s, &level.raccoon_start_pool, loc) or_return
     }
 
     return true

@@ -45,6 +45,8 @@ data_file_filename :: "data"
 t_save_data :: proc() {
 
 	g.gs.level.crab_start_pos = g.gs.crab
+	g.gs.level.raccoon_start_pool = g.gs.raccoon_pool
+	
 	g.levels[g.gs.current_level_index] = g.gs.level
 	g.initial_current_level = g.gs.level
 
@@ -126,11 +128,8 @@ swap_to_level :: proc(i: int) {
 	g.initial_current_level = g.levels[i]
 	g.gs.level = g.initial_current_level
 	g.gs.crab = g.initial_current_level.crab_start_pos
+	g.gs.raccoon_pool = g.initial_current_level.raccoon_start_pool
 
-	g.gs.raccoon_active = (i == raccoon_level_index)
-	if g.gs.raccoon_active {
-		spawn_raccoon_opposite_crab()
-	}
 
 	g.gs.game_over      = false
 	g.gs.level_complete = false
@@ -143,39 +142,39 @@ swap_to_level :: proc(i: int) {
 	g.gs.num_keys_crab_has = 0
 }
 
-spawn_raccoon_opposite_crab :: proc() {
-	t := &g.gs.level.tilemap
-	crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
-	target_x := t.width  - 1 - crab_tile.x
-	target_y := t.height - 1 - crab_tile.y
+// spawn_raccoon_opposite_crab :: proc() {
+// 	t := &g.gs.level.tilemap
+// 	crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
+// 	target_x := t.width  - 1 - crab_tile.x
+// 	target_y := t.height - 1 - crab_tile.y
 
-	// Spiral outward from the opposite corner until we land on a walkable tile.
-	// Guaranteed to terminate because the crab's own tile is walkable.
-	max_radius := t.width + t.height
-	found_x, found_y := target_x, target_y
-	search: for radius in 0..=max_radius {
-		for dy in -radius..=radius {
-			for dx in -radius..=radius {
-				if abs(dx) != radius && abs(dy) != radius do continue
-				tx := target_x + dx
-				ty := target_y + dy
-				if tx < 0 || tx >= t.width || ty < 0 || ty >= t.height do continue
-				if tx == crab_tile.x && ty == crab_tile.y do continue
-				if tilemap_is_walkable(t, tx, ty) {
-					found_x = tx
-					found_y = ty
-					break search
-				}
-			}
-		}
-	}
+// 	// Spiral outward from the opposite corner until we land on a walkable tile.
+// 	// Guaranteed to terminate because the crab's own tile is walkable.
+// 	max_radius := t.width + t.height
+// 	found_x, found_y := target_x, target_y
+// 	search: for radius in 0..=max_radius {
+// 		for dy in -radius..=radius {
+// 			for dx in -radius..=radius {
+// 				if abs(dx) != radius && abs(dy) != radius do continue
+// 				tx := target_x + dx
+// 				ty := target_y + dy
+// 				if tx < 0 || tx >= t.width || ty < 0 || ty >= t.height do continue
+// 				if tx == crab_tile.x && ty == crab_tile.y do continue
+// 				if tilemap_is_walkable(t, tx, ty) {
+// 					found_x = tx
+// 					found_y = ty
+// 					break search
+// 				}
+// 			}
+// 		}
+// 	}
 
-	g.gs.raccoon = absolute_tile_to_tilemap_pos(found_x, found_y)
-	g.gs.raccoon_direction = .None
-	g.gs.raccoon_move_speed = 3.0
-}
+// 	g.gs.raccoon = absolute_tile_to_tilemap_pos(found_x, found_y)
+// 	g.gs.raccoon_direction = .None
+// 	raccoon_move_speed = 3.0
+// }
 
-
+raccoon_move_speed : f32 = 3.0
 
 
 
@@ -382,73 +381,81 @@ blinky_pick_direction :: proc(t: ^Tilemap, from: Tilemap_Pos, target: [2]int, cu
 }
 
 update_raccoon :: proc() {
-	if !g.gs.raccoon_active do return
-	if g.gs.game_over || g.gs.level_complete do return
+	for &raccoon in g.gs.raccoon_pool {
+		if !raccoon.active do continue
 
-	gs := &g.gs
-	t  := &gs.level.tilemap
+		if g.gs.game_over || g.gs.level_complete do return
 
-	defer tilemap_pos_normalize_chunk(&gs.raccoon)
+		gs := &g.gs
+		t  := &gs.level.tilemap
 
-	// Bootstrap: on first tick with no direction, pick one immediately.
-	if gs.raccoon_direction == .None {
+		defer tilemap_pos_normalize_chunk(&raccoon.pos)
+
+		// Bootstrap: on first tick with no direction, pick one immediately.
+		if raccoon.direction == .None {
+			target := tilemap_pos_absolute_tile(gs.crab)
+			raccoon.direction = blinky_pick_direction(t, raccoon.pos, target, .None)
+			if raccoon.direction == .None do return
+		}
+
+		dv := direction_vector(raccoon.direction)
+		dv_f := [2]f32{f32(dv.x), f32(dv.y)}
+		pre_rel := raccoon.pos.rel_pos
+		move_speed := raccoon_move_speed
+		if g.gs.is_rearranging_chunks {
+			move_speed *= 0.1
+		}
+		raccoon.pos.rel_pos += dv_f * move_speed * rl.GetFrameTime()
+
+		crossed_cx := raccoon.pos.rel_pos.x
+		crossed_cy := raccoon.pos.rel_pos.y
+		crossed := false
+
+		if dv.x != 0 {
+			pre_u  := math.floor(pre_rel.x - 0.5)
+			post_u := math.floor(raccoon.pos.rel_pos.x - 0.5)
+			if pre_u != post_u {
+				crossed = true
+				u_cross := dv.x > 0 ? post_u : pre_u
+				crossed_cx = u_cross + 0.5
+			}
+		}
+		if dv.y != 0 {
+			pre_u  := math.floor(pre_rel.y - 0.5)
+			post_u := math.floor(raccoon.pos.rel_pos.y - 0.5)
+			if pre_u != post_u {
+				crossed = true
+				u_cross := dv.y > 0 ? post_u : pre_u
+				crossed_cy = u_cross + 0.5
+			}
+		}
+
+		if !crossed do return
+
+		// At the crossed tile center: snap, run Blinky AI, resume.
+		saved_rel   := raccoon.pos.rel_pos
+		saved_chunk := raccoon.pos.chunk
+		raccoon.pos.rel_pos = {crossed_cx, crossed_cy}
+		tilemap_pos_normalize_chunk(&raccoon.pos)
+
 		target := tilemap_pos_absolute_tile(gs.crab)
-		gs.raccoon_direction = blinky_pick_direction(t, gs.raccoon, target, .None)
-		if gs.raccoon_direction == .None do return
-	}
+		next_dir := blinky_pick_direction(t, raccoon.pos, target, raccoon.direction)
 
-	dv := direction_vector(gs.raccoon_direction)
-	dv_f := [2]f32{f32(dv.x), f32(dv.y)}
-	pre_rel := gs.raccoon.rel_pos
-	gs.raccoon.rel_pos += dv_f * gs.raccoon_move_speed * rl.GetFrameTime()
+		if next_dir == .None {
+			// Completely boxed in (walls on all sides including behind). Stop here.
+			raccoon.direction = .None
+			return
+		}
 
-	crossed_cx := gs.raccoon.rel_pos.x
-	crossed_cy := gs.raccoon.rel_pos.y
-	crossed := false
-
-	if dv.x != 0 {
-		pre_u  := math.floor(pre_rel.x - 0.5)
-		post_u := math.floor(gs.raccoon.rel_pos.x - 0.5)
-		if pre_u != post_u {
-			crossed = true
-			u_cross := dv.x > 0 ? post_u : pre_u
-			crossed_cx = u_cross + 0.5
+		if next_dir == raccoon.direction {
+			// Straight through — preserve overshoot so movement stays smooth.
+			raccoon.pos.rel_pos = saved_rel
+			raccoon.pos.chunk   = saved_chunk
+		} else {
+			raccoon.direction = next_dir
 		}
 	}
-	if dv.y != 0 {
-		pre_u  := math.floor(pre_rel.y - 0.5)
-		post_u := math.floor(gs.raccoon.rel_pos.y - 0.5)
-		if pre_u != post_u {
-			crossed = true
-			u_cross := dv.y > 0 ? post_u : pre_u
-			crossed_cy = u_cross + 0.5
-		}
-	}
-
-	if !crossed do return
-
-	// At the crossed tile center: snap, run Blinky AI, resume.
-	saved_rel   := gs.raccoon.rel_pos
-	saved_chunk := gs.raccoon.chunk
-	gs.raccoon.rel_pos = {crossed_cx, crossed_cy}
-	tilemap_pos_normalize_chunk(&gs.raccoon)
-
-	target := tilemap_pos_absolute_tile(gs.crab)
-	next_dir := blinky_pick_direction(t, gs.raccoon, target, gs.raccoon_direction)
-
-	if next_dir == .None {
-		// Completely boxed in (walls on all sides including behind). Stop here.
-		gs.raccoon_direction = .None
-		return
-	}
-
-	if next_dir == gs.raccoon_direction {
-		// Straight through — preserve overshoot so movement stays smooth.
-		gs.raccoon.rel_pos = saved_rel
-		gs.raccoon.chunk   = saved_chunk
-	} else {
-		gs.raccoon_direction = next_dir
-	}
+		
 }
 
 update :: proc() {
@@ -533,7 +540,47 @@ update :: proc() {
 		tile_y := int(mouse_rel_tilemap.y) / tile_size
 
 		place_crab_mod_key := rl.KeyboardKey.C
-		if !rl.IsKeyDown(place_crab_mod_key) {
+		place_coon_mod_key := rl.KeyboardKey.V
+
+		if !rl.IsKeyDown(place_crab_mod_key) && !rl.IsKeyDown(place_coon_mod_key) {
+			if (rl.IsMouseButtonDown(.LEFT)) {
+				tilemap_set_tile(tilemap, tile_x, tile_y, g.editor_selected_tile_type)
+			} else if rl.IsMouseButtonDown(.RIGHT) {
+				tilemap_set_tile(tilemap, tile_x, tile_y, .Trail)
+			}
+		} else if rl.IsKeyDown(place_crab_mod_key) {
+			// NOTE(john) Only works when zoomed out
+			if (rl.IsMouseButtonPressed(.LEFT)) {
+				g.gs.crab = absolute_tile_to_tilemap_pos(tile_x, tile_y)
+			}
+		} else if rl.IsKeyDown(place_coon_mod_key) {
+			if (rl.IsMouseButtonPressed(.LEFT)) {
+				// set first active raccoon
+				for &raccoon in g.gs.raccoon_pool {
+					if !raccoon.active {
+						tilemap_pos_clicked := absolute_tile_to_tilemap_pos(tile_x, tile_y)
+						raccoon.pos = tilemap_pos_clicked
+						raccoon.direction = .None
+						raccoon.active = true
+						break
+					}
+				}
+			} else if (rl.IsMouseButtonPressed(.RIGHT)) {
+				// rid any raccoons in tile
+				for &raccoon in g.gs.raccoon_pool {
+					if raccoon.active {
+						tilemap_pos_clicked := absolute_tile_to_tilemap_pos(tile_x, tile_y)
+						tile_clicked := tilemap_pos_absolute_tile(tilemap_pos_clicked)
+						raccoon_tile := tilemap_pos_absolute_tile(raccoon.pos )
+						if tile_clicked == raccoon_tile {
+							raccoon.active = false
+						}
+					}
+				}
+			}
+		}
+
+		if !rl.IsKeyDown(place_coon_mod_key) {
 			if (rl.IsMouseButtonDown(.LEFT)) {
 				tilemap_set_tile(tilemap, tile_x, tile_y, g.editor_selected_tile_type)
 			} else if rl.IsMouseButtonDown(.RIGHT) {
@@ -541,10 +588,9 @@ update :: proc() {
 			}
 		} else {
 			// NOTE(john) Only works when zoomed out
-			if (rl.IsMouseButtonPressed(.LEFT)) {
-				g.gs.crab = absolute_tile_to_tilemap_pos(tile_x, tile_y)
-			}
+			
 		}
+
 
 	}
 
@@ -561,6 +607,14 @@ update :: proc() {
 		if IsKeyReleased(enter_rearrange_mode_key) || IsGamepadButtonReleased(0, enter_rearrange_mode_button) {
 			g.gs.is_rearranging_chunks = false
 			g.gs.is_chunk_selection_active = false
+			g.gs.zoom_timer = zoom_timer_duration_sec
+		}
+
+		if IsGamepadButtonPressed(0, .LEFT_TRIGGER_1) {
+			if g.gs.is_rearranging_chunks {
+				g.gs.is_chunk_selection_active = false
+			}
+			g.gs.is_rearranging_chunks = !g.gs.is_rearranging_chunks
 			g.gs.zoom_timer = zoom_timer_duration_sec
 		}
 
@@ -633,6 +687,14 @@ update :: proc() {
 				} else if g.gs.crab.chunk == g.gs.selected_chunk {
 					g.gs.crab.chunk = g.gs.hovered_chunk
 				}
+				// so do raccoons
+				for &raccoon in g.gs.raccoon_pool {
+					if raccoon.pos.chunk == g.gs.hovered_chunk {
+						raccoon.pos.chunk = g.gs.selected_chunk
+					} else if raccoon.pos.chunk == g.gs.selected_chunk {
+						raccoon.pos.chunk = g.gs.hovered_chunk
+					}
+				}
 				g.gs.player_pos = tilemap_pos_to_world_pos(tilemap, g.gs.crab)
 
 				g.gs.is_chunk_selection_active = false
@@ -655,14 +717,24 @@ update :: proc() {
 	g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
 	g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
 
+	@(static) paused : bool
+	if rl.IsKeyPressed(.ENTER) {
+		paused = !paused
+	}
 
+	if !paused {
+		update_crab()
+		update_raccoon()
+	}
 
-	update_crab()
-	update_raccoon()
+	did_any_raccoons_get_crab := false
+	for raccoon in g.gs.raccoon_pool {
+		if raccoon.active {
+			did_any_raccoons_get_crab |=  tilemap_pos_absolute_tile(g.gs.crab) == tilemap_pos_absolute_tile(raccoon.pos)
+		}
+	}
 
-	if !g.gs.game_over && !g.gs.level_complete &&
-	   g.gs.raccoon_active &&
-	   tilemap_pos_absolute_tile(g.gs.crab) == tilemap_pos_absolute_tile(g.gs.raccoon) {
+	if !g.gs.game_over && !g.gs.level_complete && did_any_raccoons_get_crab {
 		// TODO: swap to a dedicated raccoon-hit sfx once the asset lands.
 		play_sound_by_name("smack")
 		g.gs.game_over  = true
@@ -903,15 +975,18 @@ update :: proc() {
 		}
 	}
 	
-	if g.gs.raccoon_active { // DRAW RACCOON
-		// TODO: switch to animated frames when coon walk-cycle assets land.
-		tex := g.coon_texture
-		raccoon_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.raccoon)
-		src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
-		dst := rl.Rectangle{raccoon_wpos.x, raccoon_wpos.y, tile_size_f, tile_size_f}
-		origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
-		rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
+	for raccoon in g.gs.raccoon_pool {
+		if raccoon.active { // DRAW RACCOON
+			// TODO: switch to animated frames when coon walk-cycle assets land.
+			tex := g.coon_texture
+			raccoon_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, raccoon.pos)
+			src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
+			dst := rl.Rectangle{raccoon_wpos.x, raccoon_wpos.y, tile_size_f, tile_size_f}
+			origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
+			rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
+		}
 	}
+		
 
 	if g.debug.debug_draw {
 		rl.DrawRectangleLinesEx({g.gs.player_pos.x - 8, g.gs.player_pos.y - 8, 16, 16}, 1, rl.MAGENTA)

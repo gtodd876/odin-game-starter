@@ -68,6 +68,7 @@ Debug_State :: struct {
 Level :: struct {
 	tilemap : Tilemap,
 	crab_start_pos : Tilemap_Pos,
+	raccoon_start_pool : [10]Raccoon,
 }
 
 
@@ -104,10 +105,7 @@ Game_State :: struct {
 	crab_anim_time: f32,
 	crab_facing: Direction,
 	elapsed_time: f32,
-	raccoon: Tilemap_Pos,
-	raccoon_direction: Direction,
-	raccoon_move_speed: f32,
-	raccoon_active: bool,
+	raccoon_pool : [10]Raccoon,
 	game_over: bool,
 	level_complete: bool,
 }
@@ -120,6 +118,12 @@ num_levels :: 10 // just add more if there ends up being more
 play_sound_by_name :: proc(name : string) {
 	m_sound := g.sfx_bank[name]
 	rl.PlaySound(m_sound)
+}
+
+Raccoon :: struct {
+	active : bool,
+	pos : Tilemap_Pos,
+	direction : Direction,
 }
 
 Game_Memory :: struct {
@@ -331,7 +335,8 @@ game_init :: proc() {
 	swap_to_level(0)
 
 	// g.levels[2].tilemap = init_tilemap_by_specifying_chunks(2, 1)
-
+	// g.levels[4] = {}
+	// g.levels[4].tilemap = init_tilemap_by_specifying_chunks(2, 2)
 
 	game_hot_reloaded(g)
 }
