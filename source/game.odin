@@ -91,6 +91,7 @@ Game_State :: struct {
 	current_level_index : int,
 	level : Level,
 	move_state: Moving_State,
+	prev_move_state: Moving_State,
 	move_speed: f32,
 	current_direction: Direction,
 	queued_direction: Direction,
@@ -128,6 +129,9 @@ Raccoon :: struct {
 
 Game_Memory :: struct {
 	sfx_bank : map[string]rl.Sound,
+	drone_music     : rl.Music,
+	clickies_music  : rl.Music,
+	dingdings_music : rl.Music,
 	render_texture : rl.RenderTexture2D,
 	old_input_state : All_Input_State,
 	input_state : All_Input_State,
@@ -327,6 +331,27 @@ game_init :: proc() {
 	g.sfx_bank["confirm"] = rl.LoadSound("assets/Confirm.wav")
 	g.sfx_bank["put-chunk"] = rl.LoadSound("assets/SFX_OptionChangev7.wav")
 
+	g.sfx_bank["zoom-out"] = rl.LoadSound("assets/zoom-in.wav")
+	g.sfx_bank["zoom-in"]  = rl.LoadSound("assets/SFX_EquipEquipmentOnev1.wav")
+	g.sfx_bank["win"]     = rl.LoadSound("assets/complete.wav")
+	g.sfx_bank["lose"]    = rl.LoadSound("assets/lose-2.wav")
+	g.sfx_bank["cluster"] = rl.LoadSound("assets/cluster.wav")
+	g.sfx_bank["chime"]   = rl.LoadSound("assets/chime.wav")
+	g.sfx_bank["unlock"]  = rl.LoadSound("assets/lock.wav")
+
+	g.drone_music     = rl.LoadMusicStream("assets/drone.wav")
+	g.clickies_music  = rl.LoadMusicStream("assets/clickies.wav")
+	g.dingdings_music = rl.LoadMusicStream("assets/dingdings.mp3")
+	g.drone_music.looping     = true
+	g.clickies_music.looping  = true
+	g.dingdings_music.looping = true
+
+	rl.PlayMusicStream(g.drone_music)
+	rl.PlayMusicStream(g.clickies_music)
+	rl.PauseMusicStream(g.clickies_music)
+	rl.PlayMusicStream(g.dingdings_music)
+	rl.PauseMusicStream(g.dingdings_music)  // held paused at position 0 until first rearrange
+
 	t_load_data(context.temp_allocator)
 
 	g.initial_current_level = g.levels[g.gs.current_level_index]
@@ -360,6 +385,12 @@ game_shutdown :: proc() {
 	for i in 0..<12 {
 		rl.UnloadTexture(g.crab_walk_textures[i])
 	}
+	for _, sound in g.sfx_bank {
+		rl.UnloadSound(sound)
+	}
+	rl.UnloadMusicStream(g.drone_music)
+	rl.UnloadMusicStream(g.clickies_music)
+	rl.UnloadMusicStream(g.dingdings_music)
 	free(g)
 }
 
