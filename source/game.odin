@@ -300,6 +300,7 @@ game_init :: proc() {
 	}
 
 	g.render_texture = rl.LoadRenderTexture(1280, 720)
+	rl.SetTextureFilter(g.render_texture.texture, .BILINEAR)
 
 	g.crabby_texture = rl.LoadTexture("assets/crab-still.png")
 	for i in 0..<12 {
