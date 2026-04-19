@@ -135,8 +135,16 @@ update_crab :: proc() {
 
 	// Refresh derived state on the way out: wrap rel_pos/chunk, then world pos.
 	defer {
-		tilemap_pos_normalize_chunk(&gs.crab)
+tilemap_pos_normalize_chunk(&gs.crab)
 		gs.player_pos = tilemap_pos_to_world_pos(t, gs.crab)
+		if gs.move_state == .Moving {
+			gs.crab_anim_time += rl.GetFrameTime()
+			if gs.current_direction != .None {
+				gs.crab_facing = gs.current_direction
+			}
+		} else {
+			gs.crab_anim_time = 0
+		}
 	}
 
 	// 1. Latest WASD press sets queued direction.
@@ -583,6 +591,18 @@ update :: proc() {
 
 	{ // DRAW CRAB
 		tex := g.crabby_texture
+		if g.gs.move_state == .Moving {
+			frame := int(g.gs.crab_anim_time * crab_anim_fps) % crab_anim_frames
+			tex = g.crab_walk_textures[frame]
+		}
+		// Sprite's default orientation faces Up, so rotate relative to that.
+		rotation : f32 = 0
+		switch g.gs.crab_facing {
+		case .None, .Up: rotation = 0
+		case .Right:     rotation = 90
+		case .Down:      rotation = 180
+		case .Left:      rotation = 270
+		}
 		src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
 		dst := rl.Rectangle{g.gs.player_pos.x, g.gs.player_pos.y, tile_size_f, tile_size_f}
 		origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
