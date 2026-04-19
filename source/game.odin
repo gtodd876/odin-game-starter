@@ -55,6 +55,7 @@ Moving_State :: enum {
 
 
 
+
 Debug_State :: struct {
 	show_overlay: bool,
 	paused:       bool,
@@ -132,6 +133,9 @@ Game_Memory :: struct {
 	key_texture: rl.Texture2D,
 	lock_texture: rl.Texture2D,
 	flag_texture: rl.Texture2D,
+	move_crab_sticker_texture : rl.Texture2D,
+	a_button_panel_texture : rl.Texture2D,
+	right_bumper_hold_panel_texture : rl.Texture2D,
 	lcd_font: rl.Font,
 }
 
@@ -250,6 +254,8 @@ game_init :: proc() {
 	g.lock_texture = rl.LoadTexture("assets/lock.png")
 	g.flag_texture = rl.LoadTexture("assets/flag.png")
 	g.coon_texture = rl.LoadTexture("assets/coon.png")
+	g.move_crab_sticker_texture = rl.LoadTexture("assets/move_crab_sticker.png")
+	g.a_button_panel_texture = rl.LoadTexture("assets/a_button_panel.png")
 
 	g.lcd_font = rl.LoadFontEx("assets/fonts/LCD2B.TTF", 72, nil, 0)
 	rl.SetTextureFilter(g.lcd_font.texture, .POINT)
@@ -328,7 +334,7 @@ game_init :: proc() {
 
 	swap_to_level(0)
 
-	g.levels[2].tilemap = init_tilemap_by_specifying_chunks(2, 1)
+	// g.levels[2].tilemap = init_tilemap_by_specifying_chunks(2, 1)
 
 
 	game_hot_reloaded(g)

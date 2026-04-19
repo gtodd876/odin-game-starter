@@ -98,6 +98,7 @@ IsGamepadButtonPressed :: proc(gamepad_id : i32, btn : rl.GamepadButton) -> bool
 IsGamepadButtonDown :: proc(gamepad_id : i32, btn : rl.GamepadButton) -> bool {
 	state := g.input_state.gamepads_state.buttons[gamepad_id][btn]
 	ret := state.ended_down == true
+
 	return ret
 }
 

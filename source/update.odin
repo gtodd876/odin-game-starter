@@ -69,19 +69,6 @@ swap_to_level :: proc(i: int) {
 	// g.gs.crab = g.gs.level.crab_start_pos
 }
 
-cycle_record_playback :: proc() {
-	if g.irs.is_playback {
-		end_input_playback(&g.irs)
-		g.old_input_state = {}
-	} else if g.irs.is_recording {
-		end_recording_input(&g.irs)
-		begin_input_playback(&g.irs, &g.gs)
-		g.irs.playback_frame = 0
-	} else {
-		begin_recording_input(&g.irs, &g.gs)
-	}
-}
-
 t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 	if os.exists(data_file_filename) {
 		s : Serializer
@@ -100,6 +87,21 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 		
 	return true
 }
+
+
+cycle_record_playback :: proc() {
+	if g.irs.is_playback {
+		end_input_playback(&g.irs)
+		g.old_input_state = {}
+	} else if g.irs.is_recording {
+		end_recording_input(&g.irs)
+		begin_input_playback(&g.irs, &g.gs)
+		g.irs.playback_frame = 0
+	} else {
+		begin_recording_input(&g.irs, &g.gs)
+	}
+}
+
 
 
 
@@ -147,7 +149,7 @@ update_crab :: proc() {
 
 	// Refresh derived state on the way out: wrap rel_pos/chunk, then world pos.
 	defer {
-tilemap_pos_normalize_chunk(&gs.crab)
+		tilemap_pos_normalize_chunk(&gs.crab)
 		gs.player_pos = tilemap_pos_to_world_pos(t, gs.crab)
 		if gs.move_state == .Moving {
 			gs.crab_anim_time += rl.GetFrameTime()
@@ -161,10 +163,10 @@ tilemap_pos_normalize_chunk(&gs.crab)
 
 	// 1. Latest WASD press sets queued direction.
 	if !g.gs.is_rearranging_chunks {
-		if      IsKeyDown(.W) || IsKeyDown(.UP) do gs.queued_direction = .Up
-		else if IsKeyDown(.S) || IsKeyDown(.DOWN) do gs.queued_direction = .Down
-		else if IsKeyDown(.A) || IsKeyDown(.LEFT) do gs.queued_direction = .Left
-		else if IsKeyDown(.D) || IsKeyDown(.RIGHT) do gs.queued_direction = .Right
+		if      IsKeyDown(.W) || IsKeyDown(.UP) || IsGamepadButtonDown(0, .LEFT_FACE_UP) do gs.queued_direction = .Up
+		else if IsKeyDown(.S) || IsKeyDown(.DOWN) || IsGamepadButtonDown(0, .LEFT_FACE_DOWN) do gs.queued_direction = .Down
+		else if IsKeyDown(.A) || IsKeyDown(.LEFT) || IsGamepadButtonDown(0, .LEFT_FACE_LEFT) do gs.queued_direction = .Left
+		else if IsKeyDown(.D) || IsKeyDown(.RIGHT) || IsGamepadButtonDown(0, .LEFT_FACE_RIGHT) do gs.queued_direction = .Right
 	}
 
 
@@ -336,10 +338,19 @@ update :: proc() {
 
 	{
 		enter_rearrange_mode_key := rl.KeyboardKey.Z
-		if IsKeyPressed(enter_rearrange_mode_key) {
-			g.gs.is_rearranging_chunks = !g.gs.is_rearranging_chunks
+		enter_rearrange_mode_button := rl.GamepadButton.RIGHT_TRIGGER_1
+
+		
+		if IsKeyPressed(enter_rearrange_mode_key) || IsGamepadButtonPressed(0, enter_rearrange_mode_button) {
+			g.gs.is_rearranging_chunks = true
 			g.gs.zoom_timer = zoom_timer_duration_sec
 		}
+		
+		if IsKeyReleased(enter_rearrange_mode_key) || IsGamepadButtonReleased(0, enter_rearrange_mode_button) {
+			g.gs.is_rearranging_chunks = false
+			g.gs.zoom_timer = zoom_timer_duration_sec
+		}
+		
 
 		crab_wpos : = tilemap_pos_to_world_pos(tilemap, g.gs.crab)
 
@@ -645,12 +656,24 @@ update :: proc() {
 		rl.DrawCircleV(crab_wpos, 4, rl.RED)
 	}
 
+	{ // instructions and ui guide stuff in camera
+		if g.gs.current_level_index == 0 {
+			rl.DrawTextureV(g.move_crab_sticker_texture, [2]f32{-600, -100}, rl.WHITE)
+		}
+	}
+
 	if g.debug.debug_draw {
 		rl.DrawRectangleLinesEx({g.gs.player_pos.x - 8, g.gs.player_pos.y - 8, 16, 16}, 1, rl.MAGENTA)
 		rl.DrawLineV({-5, 0}, {5, 0}, rl.YELLOW)
 		rl.DrawLineV({0, -5}, {0, 5}, rl.YELLOW)
 	}
 	rl.EndMode2D()
+
+	{ // instructions and ui guide stuff outside of camera
+		if g.gs.current_level_index == 2 {
+			rl.DrawTextureV(g.a_button_panel_texture, [2]f32{10, 200}, rl.WHITE)
+		}
+	}
 
 	// Debug overlay is drawn in screen space (no camera) so its controls sit
 	// on top of everything. `fmt.ctprintf` uses the temp allocator, which is
