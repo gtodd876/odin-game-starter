@@ -50,7 +50,7 @@ t_save_data :: proc() {
 
 	g.gs.level.crab_start_pos = g.gs.crab
 	g.gs.level.raccoon_start_pool = g.gs.raccoon_pool
-	
+
 	g.levels[g.gs.current_level_index] = g.gs.level
 	g.initial_current_level = g.gs.level
 
@@ -478,7 +478,7 @@ update_raccoon :: proc() {
 			raccoon.direction = next_dir
 		}
 	}
-		
+
 }
 
 update :: proc() {
@@ -611,7 +611,7 @@ update :: proc() {
 			}
 		} else {
 			// NOTE(john) Only works when zoomed out
-			
+
 		}
 
 
@@ -788,7 +788,7 @@ update :: proc() {
 	// if !g.gs.game_over && !g.gs.level_complete &&
 	//    g.gs.raccoon_active &&
 	//    tilemap_pos_absolute_tile(g.gs.crab) == tilemap_pos_absolute_tile(g.gs.raccoon) {
-		
+
 	// }
 
 	if !g.gs.game_over && !g.gs.level_complete { // crab reached the flag
@@ -981,7 +981,7 @@ update :: proc() {
 					black := rl.BLACK
 					black.a = 150
 					rl.DrawRectangleLinesEx(chunk_rect, 20, black)
-				} 
+				}
 
 				is_selected := g.gs.is_chunk_selection_active && chunk_id == g.gs.selected_chunk
 				is_hovered  := chunk_id == g.gs.hovered_chunk
@@ -1041,7 +1041,7 @@ update :: proc() {
 			// rl.DrawTextureV(g.move_crab_sticker_texture, [2]f32{-600, -100}, rl.WHITE)
 		}
 	}
-	
+
 	raccoon_frame := 0
 	if g.gs.raccoon_spawn_delay <= 0 {
 		raccoon_frame = int(g.gs.elapsed_time * raccoon_anim_fps) %% raccoon_anim_frames
@@ -1066,7 +1066,7 @@ update :: proc() {
 	// 	origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
 	// 	rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
 	// }
-		
+
 
 	if g.debug.debug_draw {
 		rl.DrawRectangleLinesEx({g.gs.player_pos.x - 8, g.gs.player_pos.y - 8, 16, 16}, 1, rl.MAGENTA)
@@ -1241,7 +1241,7 @@ update :: proc() {
 	} else if g.gs.level_complete && g.gs.current_level_index == num_levels - 1 {
 		draw_popup(
 			"You Win",
-			"by John Blatt and Todd Matthews",
+			"by John Blat and Todd Matthews",
 			"Hit A to play again",
 			middle2 = "Crabin Jam 2026",
 		)
