@@ -335,7 +335,7 @@ game_init :: proc() {
 	g.sfx_bank["put-chunk"] = rl.LoadSound("assets/SFX_OptionChangev7.ogg")
 	g.sfx_bank["zoom-out"]  = rl.LoadSound("assets/zoom-in.ogg")
 	g.sfx_bank["zoom-in"]   = rl.LoadSound("assets/SFX_EquipEquipmentOnev1.ogg")
-	g.sfx_bank["win"]       = rl.LoadSound("assets/complete.ogg")
+	g.sfx_bank["win"]       = rl.LoadSound("assets/complete-harp.ogg")
 	g.sfx_bank["cluster"]   = rl.LoadSound("assets/cluster.ogg")
 	g.sfx_bank["chime"]     = rl.LoadSound("assets/chime.ogg")
 	g.sfx_bank["unlock"]    = rl.LoadSound("assets/lock.ogg")
