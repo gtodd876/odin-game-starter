@@ -1057,16 +1057,6 @@ update :: proc() {
 		}
 	}
 
-	// if g.gs.raccoon_active { // DRAW RACCOON
-	// 	// TODO: switch to animated frames when coon walk-cycle assets land.
-	// 	tex := g.coon_texture
-	// 	raccoon_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.raccoon)
-	// 	src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
-	// 	dst := rl.Rectangle{raccoon_wpos.x, raccoon_wpos.y, tile_size_f, tile_size_f}
-	// 	origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
-	// 	rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
-	// }
-
 
 	if g.debug.debug_draw {
 		rl.DrawRectangleLinesEx({g.gs.player_pos.x - 8, g.gs.player_pos.y - 8, 16, 16}, 1, rl.MAGENTA)
@@ -1113,28 +1103,35 @@ update :: proc() {
 	rl.EndMode2D()
 
 	{ // instructions and ui guide stuff outside of camera
-		// if g.gs.current_level_index == 2 {
-		// 	rl.DrawTextureV(g.a_button_panel_texture, [2]f32{10, 200}, rl.WHITE)
-		// }
-
 		if g.gs.current_level_index >= 2 {
 			hidden_pos :=  [2]f32{
-				f32(g.render_texture.texture.width) + 100, 10
+				f32(g.render_texture.texture.width) + 100, 100
 			}
 			visible_pos := [2]f32{
-				f32(g.render_texture.texture.width) - 150, 10
+				f32(g.render_texture.texture.width) - 150, 100
 			}
 
 			dpad_hidden_pos := hidden_pos
-			dpad_hidden_pos.y += 200
+			dpad_hidden_pos.y += 150
 			dpad_visible_pos := visible_pos
-			dpad_visible_pos.y += 200
+			dpad_visible_pos.y += 150
 
 			a_visible_pos := visible_pos
 			a_hidden_pos := hidden_pos
-			a_visible_pos.y += 430
-			a_hidden_pos.y += 430
+			a_visible_pos.y += 320
+			a_hidden_pos.y += 320
 
+			left_side_hidden_pos := [2]f32 {-300, 0}
+			left_side_visible_pos := [2]f32{0, 0}
+
+			right_side_hidden_pos := [2]f32 {f32(g.render_texture.texture.width), 0}
+			right_side_visible_pos := [2]f32 {f32(g.render_texture.texture.width)-210, 0}
+
+			top_hidden_pos := [2]f32{0, -200}
+			top_visible_pos := [2]f32{0,0}
+
+			bottom_hidden_pos := [2]f32{0, f32(g.render_texture.texture.height)}
+			bottom_visible_pos := [2]f32{0, f32(g.render_texture.texture.height) -100}
 
 			hold_tex := g.right_bumper_hold_panel_texture
 			release_tex := g.right_bumper_release_panel_texture
@@ -1142,6 +1139,8 @@ update :: proc() {
 			dpad_crab_walk_tex := g.dpad_crab_walk_texture
 			a_select_tex := g.a_button_select_texture
 			a_swap_tex := g.a_button_swap_texture
+
+			sandcastle_1_tex := g.sandcastle_deco_1_texture
 
 			p := 1.0 - ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
 			p_inverse := ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
@@ -1154,6 +1153,10 @@ update :: proc() {
 			dpad_crab_walk_tex_pos := [2]f32{}
 			a_select_tex_pos := [2]f32{}
 			a_swap_tex_pos := [2]f32{}
+			sandcastle_1_tex_pos := [2]f32{}
+			top_deco_tex_pos := [2]f32{}
+			sandcastle_right_tex_pos := [2]f32{}
+			bottom_deco_pos := [2]f32{}
 
 			if g.gs.is_rearranging_chunks {
 				hold_tex_p := p
@@ -1166,6 +1169,14 @@ update :: proc() {
 				release_tex_pos = linalg.lerp(hidden_pos, visible_pos, p)
 
 				a_select_tex_pos = linalg.lerp(a_hidden_pos, a_visible_pos, p)
+
+				sandcastle_1_tex_pos = linalg.lerp(left_side_hidden_pos, left_side_visible_pos, p)
+
+				top_deco_tex_pos = linalg.lerp(top_hidden_pos, top_visible_pos, p)
+
+				sandcastle_right_tex_pos = linalg.lerp(right_side_hidden_pos, right_side_visible_pos, p)
+
+				bottom_deco_pos = linalg.lerp(bottom_hidden_pos, bottom_visible_pos, p)
 
 				if g.gs.is_chunk_selection_active {
 					a_select_tex_pos = linalg.lerp(a_visible_pos, a_hidden_pos, a_p)
@@ -1189,6 +1200,15 @@ update :: proc() {
 
 				a_select_tex_pos = linalg.lerp(a_visible_pos, a_hidden_pos, p)
 
+				sandcastle_1_tex_pos = linalg.lerp(left_side_visible_pos, left_side_hidden_pos,  p)
+
+				top_deco_tex_pos = linalg.lerp(top_visible_pos, top_hidden_pos,  p)
+
+				sandcastle_right_tex_pos = linalg.lerp(right_side_visible_pos, right_side_hidden_pos,  p)
+
+				bottom_deco_pos = linalg.lerp(bottom_visible_pos, bottom_hidden_pos,  p)
+
+
 				if g.gs.is_chunk_selection_active {
 					a_swap_tex_pos = linalg.lerp(a_visible_pos, a_hidden_pos, p)
 				} else {
@@ -1196,12 +1216,21 @@ update :: proc() {
 				}
 			}
 
+			rl.DrawTextureEx(g.bottom_deco_texture, bottom_deco_pos, {}, 1.0, rl.WHITE)
+			rl.DrawTextureEx(g.top_deco, top_deco_tex_pos, {}, 1.0, rl.WHITE)
+			rl.DrawTextureEx(sandcastle_1_tex, sandcastle_1_tex_pos, {}, 1.0, rl.WHITE)
+
+			rl.DrawTextureEx(g.sandcastle_deco_right_texture, sandcastle_right_tex_pos, {}, 1.0, rl.WHITE)
+
+
 			rl.DrawTextureEx(hold_tex, hold_tex_pos, {}, 0.5, rl.WHITE)
 			rl.DrawTextureEx(release_tex, release_tex_pos,  {}, 0.5, rl.WHITE)
 			rl.DrawTextureEx(dpad_tex, dpad_tex_pos, {}, 0.6, rl.WHITE)
 			rl.DrawTextureEx(a_select_tex, a_select_tex_pos, {}, 0.6, rl.WHITE)
 			rl.DrawTextureEx(a_swap_tex, a_swap_tex_pos, {}, 0.6, rl.WHITE)
 			rl.DrawTextureEx(dpad_crab_walk_tex, dpad_crab_walk_tex_pos, {}, 0.6, rl.WHITE)
+
+
 		} else {
 			// dpad_crab_walk_tex := g.dpad_crab_walk_texture
 
@@ -1219,12 +1248,16 @@ update :: proc() {
 	// freed at end-of-frame by the host in main_hot_reload.odin /
 	// main_release.odin / main_web_entry.odin.
 
+	palete_1_a := PALETTE_1
+	palete_1_a.a = 200
+
 	hud_rect := rl.Rectangle{ 8, 8, f32(g.render_texture.texture.width) / 6, 120 }
-	rl.DrawRectangleRounded       (hud_rect, 0.15, 8,    PALETTE_1)
+	rl.DrawRectangleRounded       (hud_rect, 0.15, 8,    palete_1_a)
 	rl.DrawRectangleRoundedLinesEx(hud_rect, 0.15, 8, 3, PALETTE_4)
 
 	minutes := int(g.gs.elapsed_time) / 60
 	seconds := int(g.gs.elapsed_time) % 60
+
 
 	rl.DrawTextEx(g.lcd_font, "TIME", {20, 12}, 40, 2, PALETTE_4)
 	rl.DrawTextEx(

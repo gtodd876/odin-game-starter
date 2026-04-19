@@ -165,6 +165,10 @@ Game_Memory :: struct {
 	dpad_move_selection_texture : rl.Texture2D,
 	dpad_crab_walk_texture : rl.Texture2D,
 	danger_texture : rl.Texture2D,
+	sandcastle_deco_1_texture : rl.Texture2D,
+	top_deco : rl.Texture2D,
+	sandcastle_deco_right_texture : rl.Texture2D,
+	bottom_deco_texture : rl.Texture2D,
 	lcd_font: rl.Font,
 }
 
@@ -295,6 +299,10 @@ game_init :: proc() {
 	g.dpad_move_selection_texture = rl.LoadTexture("assets/dpad_move_selection.png")
 	g.dpad_crab_walk_texture = rl.LoadTexture("assets/dpad_crab_walk.png")
 	g.danger_texture = rl.LoadTexture("assets/danger.png")
+	g.sandcastle_deco_1_texture = rl.LoadTexture("assets/sandcsatle_deco1.png")
+	g.top_deco = rl.LoadTexture("assets/top_deco.png")
+	g.sandcastle_deco_right_texture = rl.LoadTexture("assets/sandcastle_deco_right.png")
+	g.bottom_deco_texture  = rl.LoadTexture("assets/bottom_deco.png")
 
 	g.lcd_font = rl.LoadFontEx("assets/fonts/LCD2B.TTF", 72, nil, 0)
 	rl.SetTextureFilter(g.lcd_font.texture, .POINT)
@@ -320,16 +328,6 @@ game_init :: proc() {
 		}
 	}
 
-	// g.levels[0].tilemap = init_tilemap_by_specifying_chunks(1, 1)
-	// g.levels[1].tilemap = init_tilemap_by_specifying_chunks(2, 1)
-	// g.levels[2].tilemap = init_tilemap_by_specifying_chunks(2, 2)
-	// g.levels[3].tilemap = init_tilemap_by_specifying_chunks(3, 3)
-	// g.levels[4].tilemap = init_tilemap_by_specifying_chunks(3, 3)
-	// g.levels[5].tilemap = init_tilemap_by_specifying_chunks(4, 4)
-	// g.levels[6].tilemap = init_tilemap_by_specifying_chunks(4, 4)
-	// g.levels[7].tilemap = init_tilemap_by_specifying_chunks(4, 4)
-	// g.levels[8].tilemap = init_tilemap_by_specifying_chunks(5, 5)
-	// g.levels[9].tilemap = init_tilemap_by_specifying_chunks(5, 5)
 
 
 	g.sfx_bank["smack"]     = rl.LoadSound("assets/billiard-pool-hit.ogg")
