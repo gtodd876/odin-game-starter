@@ -1015,6 +1015,7 @@ update :: proc() {
 			origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
 			rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
 		}
+	}
 
 	// if g.gs.raccoon_active { // DRAW RACCOON
 	// 	// TODO: switch to animated frames when coon walk-cycle assets land.
