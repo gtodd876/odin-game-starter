@@ -320,16 +320,16 @@ game_init :: proc() {
 		}
 	}
 
-	g.levels[0].tilemap = init_tilemap_by_specifying_chunks(1, 1)
-	g.levels[1].tilemap = init_tilemap_by_specifying_chunks(2, 1)
-	g.levels[2].tilemap = init_tilemap_by_specifying_chunks(2, 2)
-	g.levels[3].tilemap = init_tilemap_by_specifying_chunks(3, 3)
-	g.levels[4].tilemap = init_tilemap_by_specifying_chunks(3, 3)
-	g.levels[5].tilemap = init_tilemap_by_specifying_chunks(4, 4)
-	g.levels[6].tilemap = init_tilemap_by_specifying_chunks(4, 4)
-	g.levels[7].tilemap = init_tilemap_by_specifying_chunks(4, 4)
-	g.levels[8].tilemap = init_tilemap_by_specifying_chunks(5, 5)
-	g.levels[9].tilemap = init_tilemap_by_specifying_chunks(5, 5)
+	// g.levels[0].tilemap = init_tilemap_by_specifying_chunks(1, 1)
+	// g.levels[1].tilemap = init_tilemap_by_specifying_chunks(2, 1)
+	// g.levels[2].tilemap = init_tilemap_by_specifying_chunks(2, 2)
+	// g.levels[3].tilemap = init_tilemap_by_specifying_chunks(3, 3)
+	// g.levels[4].tilemap = init_tilemap_by_specifying_chunks(3, 3)
+	// g.levels[5].tilemap = init_tilemap_by_specifying_chunks(4, 4)
+	// g.levels[6].tilemap = init_tilemap_by_specifying_chunks(4, 4)
+	// g.levels[7].tilemap = init_tilemap_by_specifying_chunks(4, 4)
+	// g.levels[8].tilemap = init_tilemap_by_specifying_chunks(5, 5)
+	// g.levels[9].tilemap = init_tilemap_by_specifying_chunks(5, 5)
 
 
 	g.sfx_bank["smack"]     = rl.LoadSound("assets/billiard-pool-hit.ogg")
@@ -363,9 +363,10 @@ game_init :: proc() {
 	swap_to_level(0)
 
 	// g.levels[2].tilemap = init_tilemap_by_specifying_chunks(2, 1)
-	// g.levels[7] = {}
-	// g.levels[7].tilemap = init_tilemap_by_specifying_chunks(5, 3)
-
+	// g.levels[8] = {}
+	// g.levels[8].tilemap = init_tilemap_by_specifying_chunks(1, 1)
+	// g.levels[9] = {}
+	// g.levels[9].tilemap = init_tilemap_by_specifying_chunks(1, 1)
 	game_hot_reloaded(g)
 }
 
