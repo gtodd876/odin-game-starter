@@ -115,7 +115,7 @@ Game_State :: struct {
 	level_complete: bool,
 }
 
-raccoon_spawn_delay_duration : f32 : 4.0
+raccoon_spawn_delay_duration : f32 : 2.0
 
 raccoon_level_index :: 4
 
@@ -386,7 +386,7 @@ game_init :: proc() {
 	// tmp := g.levels[9]
 	// g.levels[9] = g.levels[8]
 	// g.levels[8] = tmp
-	
+
 	// g.levels[9] = {}
 	// g.levels[9].tilemap = init_tilemap_by_specifying_chunks(5, 5)
 	game_hot_reloaded(g)
