@@ -755,12 +755,13 @@ update :: proc() {
 		g.gs.move_state = .Idle
 	}
 
-	if g.gs.move_state == .Moving && g.gs.prev_move_state != .Moving {
+	walking_gameplay := g.gs.move_state == .Moving && !g.gs.is_rearranging_chunks
+	if walking_gameplay && !g.gs.prev_walking_gameplay {
 		rl.ResumeMusicStream(g.clickies_music)
-	} else if g.gs.move_state != .Moving && g.gs.prev_move_state == .Moving {
+	} else if !walking_gameplay && g.gs.prev_walking_gameplay {
 		rl.PauseMusicStream(g.clickies_music)
 	}
-	g.gs.prev_move_state = g.gs.move_state
+	g.gs.prev_walking_gameplay = walking_gameplay
 
 	// if !g.gs.game_over && !g.gs.level_complete &&
 	//    g.gs.raccoon_active &&

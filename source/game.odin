@@ -91,7 +91,7 @@ Game_State :: struct {
 	current_level_index : int,
 	level : Level,
 	move_state: Moving_State,
-	prev_move_state: Moving_State,
+	prev_walking_gameplay: bool,
 	move_speed: f32,
 	current_direction: Direction,
 	queued_direction: Direction,
@@ -334,7 +334,7 @@ game_init :: proc() {
 	g.sfx_bank["chime"]     = rl.LoadSound("assets/chime.ogg")
 	g.sfx_bank["unlock"]    = rl.LoadSound("assets/lock.ogg")
 
-	g.drone_music     = rl.LoadMusicStream("assets/drone.ogg")
+	g.drone_music     = rl.LoadMusicStream("assets/drone-2.ogg")
 	g.clickies_music  = rl.LoadMusicStream("assets/clickies.ogg")
 	g.dingdings_music = rl.LoadMusicStream("assets/dingdings.mp3")
 	g.drone_music.looping     = true
