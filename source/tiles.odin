@@ -61,10 +61,7 @@ tilemap_set_tile :: proc(tilemap : ^Tilemap, x, y : int, val : Tile_Type) {
 	if in_bounds {
 		tilemap.tiles[(y*tilemap.width)+x] = val
 	} else {
-		// Why are u here?
-		when ODIN_DEBUG {
-			intrinsics.debug_trap()
-		}
+		
 	}
 }
 

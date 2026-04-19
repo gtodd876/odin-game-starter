@@ -279,7 +279,7 @@ game_init :: proc() {
 					f32(tx %% chunk_width)  + 0.5,
 					f32(ty %% chunk_height) + 0.5,
 				}
-				g.gs.player_pos = crab_world_pos(&g.gs.tilemap, g.gs.crab)
+				g.gs.player_pos = tilemap_pos_to_world_pos(&g.gs.tilemap, g.gs.crab)
 				break spawn
 			}
 		}
