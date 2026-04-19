@@ -43,9 +43,14 @@ game_update :: proc() {
 data_file_filename :: "data"
 
 t_save_data :: proc() {
+
+	g.gs.level.crab_start_pos = g.gs.crab
+	g.levels[g.gs.current_level_index] = g.gs.level
+	g.initial_current_level = g.gs.level
+
 	s : Serializer
 	serializer_init_writer(&s, allocator = context.temp_allocator)
-	serialize(&s, &g.gs.tilemap)
+	serialize(&s, &g.levels)
 	werr := os.write_entire_file(data_file_filename, s.data[:])
 	if werr != nil {
 		fmt.printfln("error writing file to data file")
@@ -53,9 +58,15 @@ t_save_data :: proc() {
 }
 
 swap_to_level :: proc(i: int) {
-	g.levels[g.gs.current_level] = g.gs.tilemap
-	g.gs.tilemap = g.levels[i]
-	g.gs.current_level = i
+	g.gs.current_level_index = i
+	g.initial_current_level = g.levels[i]
+	g.gs.level = g.initial_current_level
+	g.gs.crab = g.initial_current_level.crab_start_pos
+	
+	// g.initial_current_level
+	// g.levels[g.gs.current_level_index] = g.initial_current_level
+	// g.gs.level = g.levels[i]
+	// g.gs.crab = g.gs.level.crab_start_pos
 }
 
 cycle_record_playback :: proc() {
@@ -72,20 +83,21 @@ cycle_record_playback :: proc() {
 }
 
 t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
-	s : Serializer
-	data, rerr := os.read_entire_file_from_path(data_file_filename, allocator)
-	if rerr != nil {
-		fmt.printfln("error reading from data file")
-		return false
+	if os.exists(data_file_filename) {
+		s : Serializer
+		data, rerr := os.read_entire_file_from_path(data_file_filename, allocator)
+		if rerr != nil {
+			fmt.printfln("error reading from data file")
+			return false
+		}
+		serializer_init_reader(&s, data[:])
+		ok := serialize(&s, &g.levels)
+		if !ok  {
+			fmt.printfln("error serializing reader")
+			return false
+		}
 	}
-	serializer_init_reader(&s, data[:])
-	ok := serialize(&s, &g.gs.tilemap)
-	if !ok  {
-		fmt.printfln("error serializing reader")
-		return false
-	}
-
-
+		
 	return true
 }
 
@@ -131,7 +143,7 @@ crab_can_step :: proc(t: ^Tilemap, cp: Tilemap_Pos, dir: Direction) -> bool {
 
 update_crab :: proc() {
 	gs := &g.gs
-	t  := &gs.tilemap
+	t  := &gs.level.tilemap
 
 	// Refresh derived state on the way out: wrap rel_pos/chunk, then world pos.
 	defer {
@@ -242,7 +254,7 @@ update :: proc() {
 	// These are planned to be enum values once
 	//... if we have an actual editor where we are placing these things
 
-	tilemap := &g.gs.tilemap
+	tilemap := &g.gs.level.tilemap
 
 	if rl.IsKeyPressed(.F2) do g.dmg_enabled = !g.dmg_enabled
 	if rl.IsKeyPressed(.F3) do g.debug.show_overlay = !g.debug.show_overlay
@@ -269,7 +281,7 @@ update :: proc() {
 		}
 
 		// Keep the active slot in sync while editing so swapping out doesn't lose work.
-		g.levels[g.gs.current_level] = g.gs.tilemap
+		// g.levels[g.gs.current_level_index] = g.gs.level
 
 		for level_key, i in level_keys {
 			if rl.IsKeyPressed(level_key) do swap_to_level(i)
@@ -410,11 +422,11 @@ update :: proc() {
 
 	{ // crab get key
 		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
-		tile_type_that_crab_on := tilemap_get_tile_val(&g.gs.tilemap, 
+		tile_type_that_crab_on := tilemap_get_tile_val(&g.gs.level.tilemap, 
 			crab_tile.x, crab_tile.y)
 		crab_on_a_key := tile_type_that_crab_on == .Key
 		if crab_on_a_key {
-			tilemap_set_tile(&g.gs.tilemap, crab_tile.x, crab_tile.y, .Trail)
+			tilemap_set_tile(&g.gs.level.tilemap, crab_tile.x, crab_tile.y, .Trail)
 			g.gs.num_keys_crab_has+=1
 		}
 	}
@@ -437,14 +449,14 @@ update :: proc() {
 			case .None : {}
 		}
 
-		tile_type_that_next_tile_is := tilemap_get_tile_val(&g.gs.tilemap,
+		tile_type_that_next_tile_is := tilemap_get_tile_val(&g.gs.level.tilemap,
 			crab_next_tile.x, crab_next_tile.y)
 
 		can_crab_open_lock := tile_type_that_next_tile_is == .Lock &&
 			g.gs.num_keys_crab_has > 0
 
 		if can_crab_open_lock {
-			tilemap_set_tile(&g.gs.tilemap, crab_next_tile.x, crab_next_tile.y, .Trail)
+			tilemap_set_tile(&g.gs.level.tilemap, crab_next_tile.x, crab_next_tile.y, .Trail)
 			g.gs.num_keys_crab_has-=1
 
 		}
@@ -526,6 +538,20 @@ update :: proc() {
 							}
 							rl.DrawTextureV(g.lock_texture, wpos, rl.WHITE)
 						}
+						case .Flag : {
+							rect := rl.Rectangle {
+								chunk_pos.x + (tile_size*f32(tile_x)),
+								chunk_pos.y + (tile_size*f32(tile_y)),
+								tile_size,
+								tile_size,
+							}
+							rl.DrawRectangleRec(rect, PALETTE_1)
+							wpos := [2]f32 {
+								chunk_pos.x + (tile_size*f32(tile_x)),
+								chunk_pos.y + (tile_size*f32(tile_y)),
+							}
+							rl.DrawTextureV(g.flag_texture, wpos, rl.WHITE)
+						}
 						case .Whatever: {
 							rect := rl.Rectangle {
 								chunk_pos.x + (tile_size*f32(tile_x)),
@@ -589,14 +615,14 @@ update :: proc() {
 		rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
 
 		for key_index in 0..<g.gs.num_keys_crab_has {
-			crab_wpos := tilemap_pos_to_world_pos(&g.gs.tilemap, g.gs.crab)
+			crab_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
 			space_from_crab := [2]f32{-16, -64}
 			space_from_last_key := [2]f32{10,-10}
 			key_wpos := crab_wpos + space_from_crab + (f32(key_index)*space_from_last_key)
 			rl.DrawTextureV(g.key_texture, key_wpos, rl.WHITE)
 		}
 
-		crab_wpos := tilemap_pos_to_world_pos(&g.gs.tilemap, g.gs.crab)
+		crab_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
 		rl.DrawCircleV(crab_wpos, 4, rl.RED)
 	}
 

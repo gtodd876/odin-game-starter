@@ -30,6 +30,7 @@ package game
 import "core:fmt"
 import "core:math/linalg"
 import rl "vendor:raylib"
+import hm "core:container/handle_map"
 
 PIXEL_WINDOW_HEIGHT :: 180
 
@@ -63,6 +64,11 @@ Debug_State :: struct {
 	force_restart_requested: bool,
 }
 
+Level :: struct {
+	tilemap : Tilemap,
+	crab_start_pos : Tilemap_Pos,
+}
+
 
 zoom_timer_duration_sec : f32 = 0.25
 camera_zoom_rearrange_mode : f32 = 0.4
@@ -77,8 +83,8 @@ Game_State :: struct {
 	is_chunk_selection_active : bool,
 	selector_move_timer : f32,
 	selected_chunk : [2]int,
-	current_level : int,
-	tilemap : Tilemap,
+	current_level_index : int,
+	level : Level,
 	move_state: Moving_State,
 	move_speed: f32,
 	current_direction: Direction,
@@ -108,7 +114,10 @@ Game_Memory :: struct {
 	input_state : All_Input_State,
 	irs : Input_Recording_State,
 	gs : Game_State,
-	levels : [level_cap]Tilemap,
+	// this level is the one used for setting an initial state
+	// the one in gs above will change when player is playing
+	initial_current_level : Level, 
+	levels : [level_cap]Level,
 	run: bool,
 	debug: Debug_State,
 	editor_selected_tile_type : Tile_Type,
@@ -196,7 +205,7 @@ draw_debug_overlay :: proc() {
 	}
 
 	// Level slots 0-9.
-	rl.DrawText(fmt.ctprintf("level %d", g.gs.current_level), i32(px)+8, i32(py)+200, 10, rl.BLACK)
+	rl.DrawText(fmt.ctprintf("level %d", g.gs.current_level_index), i32(px)+8, i32(py)+200, 10, rl.BLACK)
 	for i in 0..<10 {
 		bx := px + 8 + f32(i) * 25
 		if rl.GuiButton({bx, py+216, 23, 23}, fmt.ctprintf("%d", i)) {
@@ -261,9 +270,9 @@ game_init :: proc() {
 		rl.SetShaderValue(g.dmg_shader, rl.GetShaderLocation(g.dmg_shader, "palette3"), &p3, .VEC4)
 	}
 
-	tilemap := init_tilemap_by_specifying_chunks(3, 2)
+	// tilemap := init_tilemap_by_specifying_chunks(3, 2)
 
-	g.gs.tilemap = tilemap
+	// g.gs.level.tilemap = tilemap
 
 	g.gs.current_direction = .None
 	g.gs.queued_direction  = .None
@@ -271,29 +280,30 @@ game_init :: proc() {
 	g.gs.move_speed        = 4.0 // tiles per second
 	g.gs.camera_zoom = 1.0
 
-	spawn: for ty in 0..<g.gs.tilemap.height {
-		for tx in 0..<g.gs.tilemap.width {
-			if tilemap_is_walkable(&g.gs.tilemap, tx, ty) {
+	spawn: for ty in 0..<g.gs.level.tilemap.height {
+		for tx in 0..<g.gs.level.tilemap.width {
+			if tilemap_is_walkable(&g.gs.level.tilemap, tx, ty) {
 				g.gs.crab.chunk   = {tx / chunk_width, ty / chunk_height}
 				g.gs.crab.rel_pos = {
 					f32(tx %% chunk_width)  + 0.5,
 					f32(ty %% chunk_height) + 0.5,
 				}
-				g.gs.player_pos = tilemap_pos_to_world_pos(&g.gs.tilemap, g.gs.crab)
+				g.gs.player_pos = tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
 				break spawn
 			}
 		}
 	}
 
-	g.levels[1] = init_tilemap_by_specifying_chunks(4, 4)
-	g.levels[2] = init_tilemap_by_specifying_chunks(2, 1)
-	g.levels[3] = init_tilemap_by_specifying_chunks(3, 3)
-	g.levels[4] = init_tilemap_by_specifying_chunks(2, 2)
-	g.levels[5] = init_tilemap_by_specifying_chunks(5, 5)
-	g.levels[6] = init_tilemap_by_specifying_chunks(4, 4)
-	g.levels[7] = init_tilemap_by_specifying_chunks(4, 4)
-	g.levels[8] = init_tilemap_by_specifying_chunks(4, 4)
-	g.levels[9] = init_tilemap_by_specifying_chunks(4, 4)
+	g.levels[0].tilemap = init_tilemap_by_specifying_chunks(1, 1)
+	g.levels[1].tilemap = init_tilemap_by_specifying_chunks(2, 1)
+	g.levels[2].tilemap = init_tilemap_by_specifying_chunks(2, 2)
+	g.levels[3].tilemap = init_tilemap_by_specifying_chunks(3, 3)
+	g.levels[4].tilemap = init_tilemap_by_specifying_chunks(3, 3)
+	g.levels[5].tilemap = init_tilemap_by_specifying_chunks(4, 4)
+	g.levels[6].tilemap = init_tilemap_by_specifying_chunks(4, 4)
+	g.levels[7].tilemap = init_tilemap_by_specifying_chunks(4, 4)
+	g.levels[8].tilemap = init_tilemap_by_specifying_chunks(5, 5)
+	g.levels[9].tilemap = init_tilemap_by_specifying_chunks(5, 5)
 
 
 	g.sfx_bank["smack"] = rl.LoadSound("assets/billiard-pool-hit.wav")
@@ -306,6 +316,14 @@ game_init :: proc() {
 	g.sfx_bank["put-chunk"] = rl.LoadSound("assets/SFX_OptionChangev7.wav")
 
 	t_load_data(context.temp_allocator)
+
+	g.initial_current_level = g.levels[g.gs.current_level_index]
+	g.gs.level = g.levels[g.gs.current_level_index]
+
+	swap_to_level(0)
+
+	// g.levels[1].tilemap = init_tilemap_by_specifying_chunks(1, 1)
+
 
 	game_hot_reloaded(g)
 }

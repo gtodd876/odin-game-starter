@@ -23,6 +23,7 @@ Tile_Type :: enum {
 	Key,
 	Lock,
 	Whatever,
+	Flag,
 }
 
 

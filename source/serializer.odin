@@ -30,6 +30,7 @@ SERIALIZER_ENABLE_GENERIC :: #config(SERIALIZER_ENABLE_GENERIC, true)
 // WARNING: do not change the order of these!
 Serializer_Version :: enum u32le {
     initial = 0,
+    add_crab_start_pos_to_level = 1,
     LATEST_PLUS_ONE,
 }
 
@@ -396,8 +397,20 @@ when SERIALIZER_ENABLE_GENERIC {
         serialize_map,
 
         serialize_tilemap,
+        serialize_level,
+        serialize_tilemap_pos,
     }
 }
+
+/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
+
 
 serialize_tilemap :: proc(s : ^Serializer, tilemap : ^Tilemap, loc := #caller_location) -> bool {
     if s.is_writing {
@@ -421,3 +434,69 @@ serialize_tilemap :: proc(s : ^Serializer, tilemap : ^Tilemap, loc := #caller_lo
     return true    
 
 }
+
+serialize_tilemap_pos :: proc(s : ^Serializer, tilemap_pos : ^Tilemap_Pos, loc := #caller_location) -> bool {
+    if s.is_writing {
+        s.version = SERIALIZER_VERSION_LATEST
+    }
+
+    serialize(s, &s.version, loc) or_return
+
+    if !s.is_writing && s.version > SERIALIZER_VERSION_LATEST {
+        fmt.printf("Unsupported version: %d\n", s.version);
+        return false;
+    }
+
+    
+    serialize(s, &tilemap_pos.chunk, loc) or_return
+    serialize(s, &tilemap_pos.rel_pos, loc) or_return
+    
+    return true
+}
+
+
+serialize_level :: proc(s : ^Serializer, level : ^Level, loc := #caller_location) -> bool {
+    if s.is_writing {
+        s.version = SERIALIZER_VERSION_LATEST
+    }
+
+    serialize(s, &s.version, loc) or_return
+
+    if !s.is_writing && s.version > SERIALIZER_VERSION_LATEST {
+        fmt.printf("Unsupported version: %d\n", s.version);
+        return false;
+    }
+
+    serialize(s, &level.tilemap, loc) or_return
+
+    if s.version >= Serializer_Version.add_crab_start_pos_to_level {
+        serialize(s, &level.crab_start_pos, loc) or_return
+    }
+
+    return true
+}   
+
+
+// serialize_levels :: proc(s : ^Serializer, levels : ^[]Levels, loc := #caller_location) -> bool {
+//     if s.is_writing {
+//         s.version = SERIALIZER_VERSION_LATEST
+//     }
+
+//     serialize(s, &s.version, loc) or_return
+
+//     if !s.is_writing && s.version > SERIALIZER_VERSION_LATEST {
+//         fmt.printf("Unsupported version: %d\n", s.version);
+//         return false;
+//     }
+
+
+//     serialize(s, &tilemap.tiles, loc) or_return
+//     serialize(s, &tilemap.width, loc) or_return
+//     serialize(s, &tilemap.height, loc) or_return
+//     serialize(s, &tilemap.num_chunks_x, loc) or_return
+//     serialize(s, &tilemap.num_chunks_y, loc) or_return
+
+
+//     return true    
+
+// }
