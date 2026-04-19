@@ -322,25 +322,18 @@ game_init :: proc() {
 	g.levels[9].tilemap = init_tilemap_by_specifying_chunks(5, 5)
 
 
-	g.sfx_bank["smack"] = rl.LoadSound("assets/billiard-pool-hit.wav")
-	g.sfx_bank["angel-choir"] = rl.LoadSound("assets/angel-choir.wav")
-	g.sfx_bank["powder-impact"] = rl.LoadSound("assets/SFX_impactpunchbag01.wav")
-	g.sfx_bank["woosh"] = rl.LoadSound("assets/SFX_EquipEquipmentOnev1.wav")
-	g.sfx_bank["ui-move-1"] = rl.LoadSound("assets/SFX_Clickv1variation01.wav")
-	g.sfx_bank["ui-move-2"] = rl.LoadSound("assets/SFX_SelectionEquipmentTwov1.wav")
-	g.sfx_bank["confirm"] = rl.LoadSound("assets/Confirm.wav")
-	g.sfx_bank["put-chunk"] = rl.LoadSound("assets/SFX_OptionChangev7.wav")
+	g.sfx_bank["smack"]     = rl.LoadSound("assets/billiard-pool-hit.ogg")
+	g.sfx_bank["ui-move-1"] = rl.LoadSound("assets/SFX_Clickv1variation01.ogg")
+	g.sfx_bank["put-chunk"] = rl.LoadSound("assets/SFX_OptionChangev7.ogg")
+	g.sfx_bank["zoom-out"]  = rl.LoadSound("assets/zoom-in.ogg")
+	g.sfx_bank["zoom-in"]   = rl.LoadSound("assets/SFX_EquipEquipmentOnev1.ogg")
+	g.sfx_bank["win"]       = rl.LoadSound("assets/complete.ogg")
+	g.sfx_bank["cluster"]   = rl.LoadSound("assets/cluster.ogg")
+	g.sfx_bank["chime"]     = rl.LoadSound("assets/chime.ogg")
+	g.sfx_bank["unlock"]    = rl.LoadSound("assets/lock.ogg")
 
-	g.sfx_bank["zoom-out"] = rl.LoadSound("assets/zoom-in.wav")
-	g.sfx_bank["zoom-in"]  = rl.LoadSound("assets/SFX_EquipEquipmentOnev1.wav")
-	g.sfx_bank["win"]     = rl.LoadSound("assets/complete.wav")
-	g.sfx_bank["lose"]    = rl.LoadSound("assets/lose-2.wav")
-	g.sfx_bank["cluster"] = rl.LoadSound("assets/cluster.wav")
-	g.sfx_bank["chime"]   = rl.LoadSound("assets/chime.wav")
-	g.sfx_bank["unlock"]  = rl.LoadSound("assets/lock.wav")
-
-	g.drone_music     = rl.LoadMusicStream("assets/drone.wav")
-	g.clickies_music  = rl.LoadMusicStream("assets/clickies.wav")
+	g.drone_music     = rl.LoadMusicStream("assets/drone.ogg")
+	g.clickies_music  = rl.LoadMusicStream("assets/clickies.ogg")
 	g.dingdings_music = rl.LoadMusicStream("assets/dingdings.mp3")
 	g.drone_music.looping     = true
 	g.clickies_music.looping  = true

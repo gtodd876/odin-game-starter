@@ -683,7 +683,7 @@ update :: proc() {
 		if IsKeyPressed(.SPACE) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) {
 			if g.gs.is_chunk_selection_active {
 				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
-				
+
 				play_sound_by_name("smack")
 				hovered_tiles := tilemap_get_chunk_tiles(tilemap,
 					g.gs.hovered_chunk.x, g.gs.hovered_chunk.y)
@@ -1015,7 +1015,16 @@ update :: proc() {
 			origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
 			rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
 		}
-	}
+
+	// if g.gs.raccoon_active { // DRAW RACCOON
+	// 	// TODO: switch to animated frames when coon walk-cycle assets land.
+	// 	tex := g.coon_texture
+	// 	raccoon_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.raccoon)
+	// 	src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
+	// 	dst := rl.Rectangle{raccoon_wpos.x, raccoon_wpos.y, tile_size_f, tile_size_f}
+	// 	origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
+	// 	rl.DrawTexturePro(tex, src, dst, origin, 0, rl.WHITE)
+	// }
 		
 
 	if g.debug.debug_draw {
@@ -1091,7 +1100,7 @@ update :: proc() {
 
 			p := 1.0 - ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
 			p_inverse := ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
-			
+
 			a_p := 1.0 - ((g.gs.swap_selection_change_timer / zoom_timer_duration_sec)*(g.gs.swap_selection_change_timer / zoom_timer_duration_sec))*(g.gs.swap_selection_change_timer / zoom_timer_duration_sec)
 
 			hold_tex_pos := [2]f32{}
@@ -1183,7 +1192,7 @@ update :: proc() {
 	)
 
 	if g.gs.game_over {
-		draw_popup("Coon got ya", "", "Hit A to play again")
+		draw_popup("Racoon got ya", "", "Hit A to play again")
 	} else if g.gs.level_complete {
 		time_str := fmt.ctprintf("%02d:%02d", minutes, seconds)
 		if g.gs.current_level_index == num_levels - 1 {
