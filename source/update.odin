@@ -401,7 +401,7 @@ update_raccoon :: proc() {
 		if raccoon.direction == .None {
 			target := tilemap_pos_absolute_tile(gs.crab)
 			raccoon.direction = blinky_pick_direction(t, raccoon.pos, target, .None)
-			if raccoon.direction == .None do return
+			if raccoon.direction == .None do continue
 		}
 
 		dv := direction_vector(raccoon.direction)
@@ -436,7 +436,7 @@ update_raccoon :: proc() {
 			}
 		}
 
-		if !crossed do return
+		if !crossed do continue
 
 		// At the crossed tile center: snap, run Blinky AI, resume.
 		saved_rel   := raccoon.pos.rel_pos
@@ -450,7 +450,7 @@ update_raccoon :: proc() {
 		if next_dir == .None {
 			// Completely boxed in (walls on all sides including behind). Stop here.
 			raccoon.direction = .None
-			return
+			continue
 		}
 
 		if next_dir == raccoon.direction {
