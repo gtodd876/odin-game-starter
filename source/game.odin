@@ -158,6 +158,7 @@ Game_Memory :: struct {
 	a_button_swap_texture : rl.Texture2D,
 	dpad_move_selection_texture : rl.Texture2D,
 	dpad_crab_walk_texture : rl.Texture2D,
+	danger_texture : rl.Texture2D,
 	lcd_font: rl.Font,
 }
 
@@ -285,6 +286,7 @@ game_init :: proc() {
 	g.a_button_swap_texture = rl.LoadTexture("assets/a_button_swap.png")
 	g.dpad_move_selection_texture = rl.LoadTexture("assets/dpad_move_selection.png")
 	g.dpad_crab_walk_texture = rl.LoadTexture("assets/dpad_crab_walk.png")
+	g.danger_texture = rl.LoadTexture("assets/danger.png")
 
 	g.lcd_font = rl.LoadFontEx("assets/fonts/LCD2B.TTF", 72, nil, 0)
 	rl.SetTextureFilter(g.lcd_font.texture, .POINT)

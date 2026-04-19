@@ -937,15 +937,21 @@ update :: proc() {
 				chunk_id := [2]int{chunk_x, chunk_y}
 					color := rl.BLACK
 
-				if chunk_id == g.gs.hovered_chunk {
-					color.a = 255
-					rl.DrawRectangleLinesEx(chunk_rect, 20, color)
-				} else if g.gs.is_chunk_selection_active {
+				if g.gs.is_chunk_selection_active {
 					if chunk_id == g.gs.selected_chunk  {
-						color = rl.GRAY
-						rl.DrawRectangleLinesEx(chunk_rect, 20, color)
+						color = rl.WHITE
+						color.a = 200
+						rl.DrawRectangleLinesEx(chunk_rect, 30, color)
 					}
 				}
+
+				if chunk_id == g.gs.hovered_chunk {
+					color.a = 255
+					black := rl.BLACK
+					black.a = 150
+					rl.DrawRectangleLinesEx(chunk_rect, 20, black)
+				} 
+
 				is_selected := g.gs.is_chunk_selection_active && chunk_id == g.gs.selected_chunk
 				is_hovered  := chunk_id == g.gs.hovered_chunk
 
@@ -1064,6 +1070,10 @@ update :: proc() {
             -242,
         }
 		rl.DrawTextEx(g.lcd_font, sub_text, sub_pos, sub_font_size, sub_spacing, PALETTE_4)
+	}
+
+	if g.gs.current_level_index == 4 {
+		rl.DrawTextureEx(g.danger_texture, [2]f32 {-800, -300}, 0, 0.8, rl.WHITE)
 	}
 
 	rl.EndMode2D()
@@ -1231,6 +1241,12 @@ update :: proc() {
 		}
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
 
+		if g.irs.is_recording {
+			rl.DrawText("Recording", 10, 10, 20, rl.WHITE)
+		}
+		if g.irs.is_playback {
+			rl.DrawText("Playback", 10, 10, 20, rl.WHITE)
+		}
 
 
 		draw_debug_overlay()
