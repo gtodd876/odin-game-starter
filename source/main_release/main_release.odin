@@ -12,7 +12,7 @@ import game ".."
 
 _ :: mem
 
-USE_TRACKING_ALLOCATOR :: #config(USE_TRACKING_ALLOCATOR, false)
+// USE_TRACKING_ALLOCATOR :: #config(USE_TRACKING_ALLOCATOR, false)
 
 main :: proc() {
 	// Set working dir to dir of executable.
