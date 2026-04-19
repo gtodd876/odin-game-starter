@@ -252,7 +252,6 @@ update :: proc() {
 
 	tilemap := &g.gs.tilemap
 
-	if rl.IsKeyPressed(.F2) do g.dmg_enabled = !g.dmg_enabled
 	if rl.IsKeyPressed(.F3) do g.debug.show_overlay = !g.debug.show_overlay
 	if rl.IsKeyPressed(.F4) do g.debug.paused = !g.debug.paused
 
@@ -658,9 +657,7 @@ update :: proc() {
 			window_scaled_width,
 			window_scaled_height,
 		}
-		if g.dmg_enabled do rl.BeginShaderMode(g.dmg_shader)
 		rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
-		if g.dmg_enabled do rl.EndShaderMode()
 
 		hud_rect := rl.Rectangle{ 8, 8, screen_width / 6, 120 }
 		rl.DrawRectangleRounded       (hud_rect, 0.15, 8,    PALETTE_1)
