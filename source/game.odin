@@ -75,6 +75,9 @@ Level :: struct {
 crab_anim_fps : f32 : 24
 crab_anim_frames :: 12
 
+raccoon_anim_fps : f32 : 24
+raccoon_anim_frames :: 18
+
 zoom_timer_duration_sec : f32 = 0.25
 camera_zoom_rearrange_mode : f32 = 0.4
 selector_move_duration : f32 = 0.2
@@ -107,9 +110,12 @@ Game_State :: struct {
 	crab_facing: Direction,
 	elapsed_time: f32,
 	raccoon_pool : [10]Raccoon,
+	raccoon_spawn_delay : f32,
 	game_over: bool,
 	level_complete: bool,
 }
+
+raccoon_spawn_delay_duration : f32 : 4.0
 
 raccoon_level_index :: 4
 
@@ -146,7 +152,7 @@ Game_Memory :: struct {
 	editor_selected_tile_type : Tile_Type,
 	crabby_texture: rl.Texture2D,
 	crab_walk_textures: [12]rl.Texture2D,
-	coon_texture: rl.Texture2D,
+	raccoon_walk_textures: [raccoon_anim_frames]rl.Texture2D,
 	key_texture: rl.Texture2D,
 	lock_texture: rl.Texture2D,
 	flag_texture: rl.Texture2D,
@@ -274,9 +280,11 @@ game_init :: proc() {
 		g.crab_walk_textures[i] = rl.LoadTexture(fmt.ctprintf("assets/crab-%d.png", i + 1))
 	}
 	g.key_texture = rl.LoadTexture("assets/key.png")
-	g.lock_texture = rl.LoadTexture("assets/lock.png")
-	g.flag_texture = rl.LoadTexture("assets/flag.png")
-	g.coon_texture = rl.LoadTexture("assets/coon.png")
+	g.lock_texture = rl.LoadTexture("assets/lock-borderless.png")
+	g.flag_texture = rl.LoadTexture("assets/flag-borderless.png")
+	for i in 0..<raccoon_anim_frames {
+		g.raccoon_walk_textures[i] = rl.LoadTexture(fmt.ctprintf("assets/raccoon-%d.png", i + 1))
+	}
 	g.move_crab_sticker_texture = rl.LoadTexture("assets/move_crab_sticker.png")
 	g.a_button_panel_texture = rl.LoadTexture("assets/a_button_panel.png")
 	g.right_bumper_hold_panel_texture = rl.LoadTexture("assets/right_bumper_hold_panel.png")
@@ -377,8 +385,11 @@ game_should_run :: proc() -> bool {
 game_shutdown :: proc() {
 	rl.UnloadFont(g.lcd_font)
 	rl.UnloadTexture(g.crabby_texture)
-	for i in 0..<12 {
+	for i in 0..<crab_anim_frames {
 		rl.UnloadTexture(g.crab_walk_textures[i])
+	}
+	for i in 0..<raccoon_anim_frames {
+		rl.UnloadTexture(g.raccoon_walk_textures[i])
 	}
 	for _, sound in g.sfx_bank {
 		rl.UnloadSound(sound)
