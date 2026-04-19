@@ -83,8 +83,8 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 }
 
 // Centered modal popup using the HUD's rounded-rect style.
-// Caller passes screen-center-aligned text lines; pass "" for middle to collapse to 2 lines.
-draw_popup :: proc(heading, middle, footer: cstring) {
+// Caller passes screen-center-aligned text lines; pass "" for any middle line to collapse it out.
+draw_popup :: proc(heading, middle, footer: cstring, middle2: cstring = "") {
 	rt_w := f32(g.render_texture.texture.width)
 	rt_h := f32(g.render_texture.texture.height)
 
@@ -98,20 +98,25 @@ draw_popup :: proc(heading, middle, footer: cstring) {
 	rl.DrawRectangleRoundedLinesEx(popup_rect, 0.15, 8, 4, PALETTE_4)
 
 	heading_size : f32 = 72
-	middle_size  : f32 = 64
+	middle_size  : f32 = 36
+	middle2_size : f32 = 56
 	footer_size  : f32 = 32
 	spacing      : f32 = 2
-	gap          : f32 = 24
+	gap          : f32 = 20
 
-	has_middle := len(string(middle)) > 0
+	has_middle  := len(string(middle))  > 0
+	has_middle2 := len(string(middle2)) > 0
 
-	h_dim := rl.MeasureTextEx(g.lcd_font, heading, heading_size, spacing)
-	m_dim : [2]f32
-	if has_middle do m_dim = rl.MeasureTextEx(g.lcd_font, middle, middle_size, spacing)
-	f_dim := rl.MeasureTextEx(g.lcd_font, footer,  footer_size,  spacing)
+	h_dim  := rl.MeasureTextEx(g.lcd_font, heading, heading_size, spacing)
+	m_dim  : [2]f32
+	m2_dim : [2]f32
+	if has_middle  do m_dim  = rl.MeasureTextEx(g.lcd_font, middle,  middle_size,  spacing)
+	if has_middle2 do m2_dim = rl.MeasureTextEx(g.lcd_font, middle2, middle2_size, spacing)
+	f_dim := rl.MeasureTextEx(g.lcd_font, footer, footer_size, spacing)
 
 	total_h := h_dim.y + gap + f_dim.y
-	if has_middle do total_h += m_dim.y + gap
+	if has_middle  do total_h += m_dim.y  + gap
+	if has_middle2 do total_h += m2_dim.y + gap
 
 	center_x := popup_x + popup_w * 0.5
 	y := popup_y + (popup_h - total_h) * 0.5
@@ -122,6 +127,11 @@ draw_popup :: proc(heading, middle, footer: cstring) {
 	if has_middle {
 		rl.DrawTextEx(g.lcd_font, middle, {center_x - m_dim.x * 0.5, y}, middle_size, spacing, PALETTE_4)
 		y += m_dim.y + gap
+	}
+
+	if has_middle2 {
+		rl.DrawTextEx(g.lcd_font, middle2, {center_x - m2_dim.x * 0.5, y}, middle2_size, spacing, PALETTE_4)
+		y += m2_dim.y + gap
 	}
 
 	rl.DrawTextEx(g.lcd_font, footer, {center_x - f_dim.x * 0.5, y}, footer_size, spacing, PALETTE_4)
@@ -140,6 +150,7 @@ swap_to_level :: proc(i: int) {
 	g.gs.raccoon_spawn_delay = raccoon_spawn_delay_duration
 
 	rl.ResumeMusicStream(g.drone_music)
+	rl.PauseMusicStream(g.dingdings_music)
 
 	// g.initial_current_level
 	// g.levels[g.gs.current_level_index] = g.initial_current_level
@@ -783,8 +794,13 @@ update :: proc() {
 	if !g.gs.game_over && !g.gs.level_complete { // crab reached the flag
 		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
 		if tilemap_get_tile_val(&g.gs.level.tilemap, crab_tile.x, crab_tile.y) == .Flag {
-			play_sound_by_name("win")
 			rl.PauseMusicStream(g.drone_music)
+			if g.gs.current_level_index == num_levels - 1 {
+				// Final level — credits popup runs dingdings instead of the win sting.
+				rl.ResumeMusicStream(g.dingdings_music)
+			} else {
+				play_sound_by_name("win")
+			}
 			g.gs.level_complete = true
 			g.gs.move_state     = .Idle
 		}
@@ -1222,13 +1238,16 @@ update :: proc() {
 
 	if g.gs.game_over {
 		draw_popup("Racoon got ya", "", "Hit A to play again")
+	} else if g.gs.level_complete && g.gs.current_level_index == num_levels - 1 {
+		draw_popup(
+			"You Win",
+			"by John Blatt and Todd Matthews",
+			"Hit A to play again",
+			middle2 = "Crabin Jam 2026",
+		)
 	} else if g.gs.level_complete {
 		time_str := fmt.ctprintf("%02d:%02d", minutes, seconds)
-		if g.gs.current_level_index == num_levels - 1 {
-			draw_popup("You Win", time_str, "Hit A to play again")
-		} else {
-			draw_popup("Level Complete", time_str, "Hit A to continue")
-		}
+		draw_popup("Level Complete", time_str, "Hit A to continue")
 	}
 
 	rl.EndTextureMode()
