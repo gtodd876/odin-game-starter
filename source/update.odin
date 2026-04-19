@@ -250,6 +250,20 @@ crab_can_step :: proc(t: ^Tilemap, cp: Tilemap_Pos, dir: Direction) -> bool {
 	return tilemap_is_walkable(t, abs_x, abs_y)
 }
 
+try_open_adjacent_lock :: proc(t: ^Tilemap, cp: Tilemap_Pos, dir: Direction) -> bool {
+	if dir == .None do return false
+	if g.gs.num_keys_crab_has <= 0 do return false
+	step := direction_vector(dir)
+	tile := tilemap_pos_absolute_tile(cp)
+	tx := tile.x + step.x
+	ty := tile.y + step.y
+	if tilemap_get_tile_val(t, tx, ty) != .Lock do return false
+	tilemap_set_tile(t, tx, ty, .Trail)
+	g.gs.num_keys_crab_has -= 1
+	play_sound_by_name("unlock")
+	return true
+}
+
 update_crab :: proc() {
 	if g.gs.game_over || g.gs.level_complete do return
 	gs := &g.gs
@@ -288,6 +302,7 @@ update_crab :: proc() {
 
 	// 3. Kick off from idle when queued leads into a walkable neighbor.
 	if gs.move_state == .Idle && gs.queued_direction != .None {
+		try_open_adjacent_lock(t, gs.crab, gs.queued_direction)
 		if crab_can_step(t, gs.crab, gs.queued_direction) {
 			gs.current_direction = gs.queued_direction
 			gs.move_state = .Moving
@@ -344,6 +359,7 @@ update_crab :: proc() {
 
 	turned := false
 	if gs.queued_direction != .None && gs.queued_direction != gs.current_direction {
+		try_open_adjacent_lock(t, gs.crab, gs.queued_direction)
 		if crab_can_step(t, gs.crab, gs.queued_direction) {
 			gs.current_direction = gs.queued_direction
 			turned = true
@@ -368,26 +384,56 @@ update_crab :: proc() {
 
 blinky_decision_order :: [4]Direction{ .Up, .Left, .Down, .Right }
 
-// Exclude the reverse of current direction; pick neighbor whose tile minimizes
-// squared distance to the target. If every forward option is blocked, reverse.
+// BFS walking distance from (sx, sy) over raccoon-traversable tiles into out
+// (size t.width*t.height). Mirrors tilemap_is_walkable: Solid and Lock are walls.
+tilemap_bfs_distances :: proc(t: ^Tilemap, sx, sy: int, out: []int) {
+	for i in 0..<len(out) do out[i] = max(int)
+	if !tilemap_is_coord_in_bounds(t, sx, sy) do return
+	queue : [max_tiles][2]int
+	head, tail : int
+	queue[tail] = {sx, sy}; tail += 1
+	out[sy*t.width + sx] = 0
+	steps := [4][2]int{{0,-1}, {0,1}, {-1,0}, {1,0}}
+	for head < tail {
+		p := queue[head]; head += 1
+		d := out[p.y*t.width + p.x]
+		for s in steps {
+			nx := p.x + s.x
+			ny := p.y + s.y
+			if !tilemap_is_coord_in_bounds(t, nx, ny) do continue
+			tt := t.tiles[ny*t.width + nx]
+			if tt == .Solid || tt == .Lock do continue
+			if out[ny*t.width + nx] != max(int) do continue
+			out[ny*t.width + nx] = d + 1
+			queue[tail] = {nx, ny}; tail += 1
+		}
+	}
+}
+
+// Exclude the reverse of current direction; pick neighbor that minimizes BFS
+// walking distance to the target. If every forward option is blocked, reverse.
 blinky_pick_direction :: proc(t: ^Tilemap, from: Tilemap_Pos, target: [2]int, current: Direction) -> Direction {
+	dists : [max_tiles]int
+	tilemap_bfs_distances(t, target.x, target.y, dists[:])
+
 	reverse := opposite_direction(current)
 	best := Direction.None
-	best_dist := max(f32)
+	best_d := max(int)
+	from_tile := tilemap_pos_absolute_tile(from)
 
 	for dir in blinky_decision_order {
 		if dir == reverse do continue
 		if !crab_can_step(t, from, dir) do continue
 
 		step := direction_vector(dir)
-		from_tile := tilemap_pos_absolute_tile(from)
 		nx := from_tile.x + step.x
 		ny := from_tile.y + step.y
-		dx := f32(nx - target.x)
-		dy := f32(ny - target.y)
-		d  := dx*dx + dy*dy
-		if d < best_dist {
-			best_dist = d
+		if !tilemap_is_coord_in_bounds(t, nx, ny) do continue
+		d := dists[ny*t.width + nx]
+		// First walkable forward seeds best so an unreachable target (all max(int))
+		// still picks SOMETHING; subsequent dirs only win on strictly closer.
+		if best == .None || d < best_d {
+			best_d = d
 			best = dir
 		}
 	}
@@ -818,38 +864,6 @@ update :: proc() {
 		}
 	}
 
-	{ // crab make lock go away
-		crab_next_tile := tilemap_pos_absolute_tile(g.gs.crab)
-		switch g.gs.current_direction {
-			case .Up: {
-				crab_next_tile.y -= 1
-			}
-			case .Down: {
-				crab_next_tile.y += 1
-			}
-			case .Left: {
-				crab_next_tile.x -= 1
-			}
-			case .Right: {
-				crab_next_tile.x += 1
-			}
-			case .None : {}
-		}
-
-		tile_type_that_next_tile_is := tilemap_get_tile_val(&g.gs.level.tilemap,
-			crab_next_tile.x, crab_next_tile.y)
-
-		can_crab_open_lock := tile_type_that_next_tile_is == .Lock &&
-			g.gs.num_keys_crab_has > 0
-
-		if can_crab_open_lock {
-			tilemap_set_tile(&g.gs.level.tilemap, crab_next_tile.x, crab_next_tile.y, .Trail)
-			g.gs.num_keys_crab_has-=1
-			play_sound_by_name("unlock")
-		}
-	}
-
-
 	rl.BeginTextureMode(g.render_texture)
 	rl.ClearBackground(PALETTE_3)
 
@@ -1030,8 +1044,8 @@ update :: proc() {
 			rl.DrawTextureV(g.key_texture, key_wpos, rl.WHITE)
 		}
 
-		crab_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
-		rl.DrawCircleV(crab_wpos, 4, rl.RED)
+		// crab_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
+		// rl.DrawCircleV(crab_wpos, 4, rl.RED)
 	}
 
 	{ // instructions and ui guide stuff in camera
