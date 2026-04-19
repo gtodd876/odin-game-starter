@@ -629,7 +629,7 @@ update :: proc() {
 		if IsKeyPressed(.SPACE) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) {
 			if g.gs.is_chunk_selection_active {
 				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
-				
+
 				play_sound_by_name("smack")
 				hovered_tiles := tilemap_get_chunk_tiles(tilemap,
 					g.gs.hovered_chunk.x, g.gs.hovered_chunk.y)
@@ -924,7 +924,7 @@ update :: proc() {
 			// rl.DrawTextureV(g.move_crab_sticker_texture, [2]f32{-600, -100}, rl.WHITE)
 		}
 	}
-	
+
 	if g.gs.raccoon_active { // DRAW RACCOON
 		// TODO: switch to animated frames when coon walk-cycle assets land.
 		tex := g.coon_texture
@@ -1008,7 +1008,7 @@ update :: proc() {
 
 			p := 1.0 - ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
 			p_inverse := ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
-			
+
 			a_p := 1.0 - ((g.gs.swap_selection_change_timer / zoom_timer_duration_sec)*(g.gs.swap_selection_change_timer / zoom_timer_duration_sec))*(g.gs.swap_selection_change_timer / zoom_timer_duration_sec)
 
 			hold_tex_pos := [2]f32{}
@@ -1100,7 +1100,7 @@ update :: proc() {
 	)
 
 	if g.gs.game_over {
-		draw_popup("Coon got ya", "", "Hit A to play again")
+		draw_popup("Racoon got ya", "", "Hit A to play again")
 	} else if g.gs.level_complete {
 		time_str := fmt.ctprintf("%02d:%02d", minutes, seconds)
 		if g.gs.current_level_index == num_levels - 1 {
