@@ -70,6 +70,9 @@ Level :: struct {
 }
 
 
+crab_anim_fps : f32 : 24
+crab_anim_frames :: 12
+
 zoom_timer_duration_sec : f32 = 0.25
 camera_zoom_rearrange_mode : f32 = 0.4
 selector_move_duration : f32 = 0.2
@@ -96,6 +99,8 @@ Game_State :: struct {
 	camera_target : [2]f32,
 	crab: Tilemap_Pos,
 	num_keys_crab_has : int,
+	crab_anim_time: f32,
+	crab_facing: Direction,
 	elapsed_time: f32,
 }
 
@@ -122,13 +127,12 @@ Game_Memory :: struct {
 	debug: Debug_State,
 	editor_selected_tile_type : Tile_Type,
 	crabby_texture: rl.Texture2D,
+	crab_walk_textures: [12]rl.Texture2D,
 	coon_texture: rl.Texture2D,
 	key_texture: rl.Texture2D,
 	lock_texture: rl.Texture2D,
 	flag_texture: rl.Texture2D,
 	lcd_font: rl.Font,
-	dmg_shader: rl.Shader,
-	dmg_enabled: bool,
 }
 
 g: ^Game_Memory
@@ -212,8 +216,6 @@ draw_debug_overlay :: proc() {
 			swap_to_level(i)
 		}
 	}
-
-	rl.GuiCheckBox({px+8, py+250, 16, 16}, "DMG shader (F2)", &g.dmg_enabled)
 }
 
 
@@ -241,6 +243,9 @@ game_init :: proc() {
 	g.render_texture = rl.LoadRenderTexture(1280, 720)
 
 	g.crabby_texture = rl.LoadTexture("assets/crab-still.png")
+	for i in 0..<12 {
+		g.crab_walk_textures[i] = rl.LoadTexture(fmt.ctprintf("assets/crab-%d.png", i + 1))
+	}
 	g.key_texture = rl.LoadTexture("assets/key.png")
 	g.lock_texture = rl.LoadTexture("assets/lock.png")
 	g.flag_texture = rl.LoadTexture("assets/flag.png")
@@ -276,6 +281,7 @@ game_init :: proc() {
 
 	g.gs.current_direction = .None
 	g.gs.queued_direction  = .None
+	g.gs.crab_facing       = .Down
 	g.gs.move_state        = .Idle
 	g.gs.move_speed        = 4.0 // tiles per second
 	g.gs.camera_zoom = 1.0
@@ -343,8 +349,10 @@ game_should_run :: proc() -> bool {
 @(export)
 game_shutdown :: proc() {
 	rl.UnloadFont(g.lcd_font)
-	rl.UnloadShader(g.dmg_shader)
 	rl.UnloadTexture(g.crabby_texture)
+	for i in 0..<12 {
+		rl.UnloadTexture(g.crab_walk_textures[i])
+	}
 	free(g)
 }
 
