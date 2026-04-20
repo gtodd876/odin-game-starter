@@ -1,4 +1,5 @@
-#+build !wasm32, !wasm64p32
+#+build !wasm32
+#+build !wasm64p32
 
 package game
 
@@ -84,7 +85,7 @@ begin_recording_input :: proc(rs : ^Input_Recording_State, s : ^Game_State) {
 
 record_input :: proc(rs : ^Input_Recording_State, new_input : ^All_Input_State) {
     new_input_bytes := mem.byte_slice(new_input, size_of(new_input^))
-    bytes_written, err := os.write(rs.recording_file, new_input_bytes)
+    _, err := os.write(rs.recording_file, new_input_bytes)
     if err != nil {
         fmt.printfln("error recording input. Turning off recording")
         end_recording_input(rs)
@@ -114,11 +115,10 @@ begin_input_playback :: proc(rs : ^Input_Recording_State, s : ^Game_State) {
     if read_err != nil {
         fmt.printfln("Error reading game memory")
         return
-    } 
-    else if bytes_read != bytes_to_read {
+    } else if bytes_read != bytes_to_read {
         fmt.printfln("Failed to read entire game memory from recording file")
         return
-    } 
+    }
 
     rs.playback_frame = 0
     rs.is_recording = false
@@ -142,14 +142,12 @@ playback_input :: proc(rs : ^Input_Recording_State, s : ^Game_State, game_input 
         end_input_playback(rs)
         begin_input_playback(rs, s)
         os.read(rs.playback_file, game_input_bytes)
-    }
-    else if nbytes_read != nbytes_to_read {
+    } else if nbytes_read != nbytes_to_read {
         fmt.printfln("Was not able to read all of game controller input. ending playback")
         rs.is_playback = false
         os.close(rs.playback_file)
         return
-    } 
-    else if file_read_err != nil {
+    } else if file_read_err != nil {
         fmt.printfln("error reading game controller input. ending playback: %v", file_read_err)
         rs.is_playback = false
         os.close(rs.playback_file)

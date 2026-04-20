@@ -1,114 +1,187 @@
 <!doctype html>
 <html lang="en-us">
-<head>
-	<meta charset="utf-8">
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-	<title>Odin + Raylib on the web</title>
-	<meta name="title" content="Odin + Raylib on the web">
-	<meta name="description" content="Make games using Odin + Raylib that work in the browser">
-	<meta name="viewport" content="width=device-width">
+        <title>Lost Crab</title>
+        <meta name="title" content="Lost Crab" />
+        <meta
+            name="description"
+            content="Make games using Odin + Raylib that work in the browser"
+        />
+        <meta name="viewport" content="width=device-width" />
+        <link rel="icon" type="image/png" sizes="32x32" href="favicon.png" />
 
-	<style>
-		body { 
-			margin: 0px; 
-			overflow: hidden; 
-			background-color: black;
-		}
-		canvas.game_canvas {
-			border: 0px none;
-			background-color: black;
-			display: block;
-			margin: 0 auto;
-			image-rendering: pixelated;
-			max-width: 100vw;
-			max-height: 100vh;
-		}
-	</style>
-</head>
-<body>
-	<canvas class="game_canvas" id="canvas" width="1280" height="720" oncontextmenu="event.preventDefault()" tabindex="-1" onmousedown="event.target.focus()" onkeydown="event.preventDefault()"></canvas>
-	<script type="text/javascript" src="odin.js"></script>
-	<script>
-		var odinMemoryInterface = new odin.WasmMemoryInterface();
-		odinMemoryInterface.setIntSize(4);
-		var odinImports = odin.setupDefaultImports(odinMemoryInterface);
+        <style>
+            body {
+                margin: 0px;
+                overflow: hidden;
+                background-color: black;
+            }
+            canvas.game_canvas {
+                border: 0px none;
+                background-color: black;
+                display: block;
+                margin: 0 auto;
+                image-rendering: pixelated;
+                max-width: 100vw;
+                max-height: 100vh;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas
+            class="game_canvas"
+            id="canvas"
+            width="1280"
+            height="720"
+            oncontextmenu="event.preventDefault()"
+            tabindex="-1"
+            onmousedown="event.target.focus()"
+            onkeydown="event.preventDefault()"
+        ></canvas>
+        <script type="text/javascript" src="odin.js"></script>
+        <script>
+            // Browser autoplay policy blocks AudioContext until a user gesture.
+            // Clicks/keys/touches unlock automatically, but gamepad button presses do
+            // not count as gestures in some browsers — so we track the contexts the
+            // app creates and call resume() when a gamepad button goes down.
+            (function () {
+                var AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return;
+                var contexts = [];
+                var Wrapper = function () {
+                    var ctx = new AC();
+                    contexts.push(ctx);
+                    return ctx;
+                };
+                Wrapper.prototype = AC.prototype;
+                window.AudioContext = Wrapper;
+                if (window.webkitAudioContext)
+                    window.webkitAudioContext = Wrapper;
 
-		// The Module is used as configuration for emscripten.
-		var Module = {
-			// This is called by emscripten when it starts up.
-			instantiateWasm: (imports, successCallback) => {
-				const newImports = {
-					...odinImports,
-					...imports
-				}
+                function resumeAll() {
+                    contexts.forEach(function (c) {
+                        if (c.state === "suspended") c.resume();
+                    });
+                }
+                function allRunning() {
+                    return (
+                        contexts.length > 0 &&
+                        contexts.every(function (c) {
+                            return c.state === "running";
+                        })
+                    );
+                }
+                function pollGamepads() {
+                    var pads = navigator.getGamepads
+                        ? navigator.getGamepads()
+                        : [];
+                    for (var i = 0; i < pads.length; i++) {
+                        var p = pads[i];
+                        if (!p) continue;
+                        for (var b = 0; b < p.buttons.length; b++) {
+                            if (p.buttons[b] && p.buttons[b].pressed) {
+                                resumeAll();
+                                break;
+                            }
+                        }
+                    }
+                    if (!allRunning()) requestAnimationFrame(pollGamepads);
+                }
+                requestAnimationFrame(pollGamepads);
+            })();
 
-				return WebAssembly.instantiateStreaming(fetch("index.wasm"), newImports).then(function(output) {
-					var e = output.instance.exports;
-					odinMemoryInterface.setExports(e);
-					odinMemoryInterface.setMemory(e.memory);
-					return successCallback(output.instance);
-				});
-			},
-			// This happens a bit after `instantiateWasm`, when everything is
-			// done setting up. At that point we can run code.
-			onRuntimeInitialized: () => {
-				var e = wasmExports;
+            var odinMemoryInterface = new odin.WasmMemoryInterface();
+            odinMemoryInterface.setIntSize(4);
+            var odinImports = odin.setupDefaultImports(odinMemoryInterface);
 
-				// Calls any procedure marked with @init
-				e._start();
+            // The Module is used as configuration for emscripten.
+            var Module = {
+                // This is called by emscripten when it starts up.
+                instantiateWasm: (imports, successCallback) => {
+                    const newImports = {
+                        ...odinImports,
+                        ...imports,
+                    };
 
-				// See source/main_web/main_web.odin for main_start,
-				// main_update and main_end.
-				e.main_start();
+                    return WebAssembly.instantiateStreaming(
+                        fetch("index.wasm"),
+                        newImports,
+                    ).then(function (output) {
+                        var e = output.instance.exports;
+                        odinMemoryInterface.setExports(e);
+                        odinMemoryInterface.setMemory(e.memory);
+                        return successCallback(output.instance);
+                    });
+                },
+                // This happens a bit after `instantiateWasm`, when everything is
+                // done setting up. At that point we can run code.
+                onRuntimeInitialized: () => {
+                    var e = wasmExports;
 
-				function send_resize() {
-					var canvas = document.getElementById('canvas');
-					e.web_window_size_changed(canvas.width, canvas.height);
-				}
+                    // Calls any procedure marked with @init
+                    e._start();
 
-				window.addEventListener('resize', function(event) {
-					send_resize();
-				}, true);
+                    // See source/main_web/main_web.odin for main_start,
+                    // main_update and main_end.
+                    e.main_start();
 
-				// This can probably be done better: Ideally we'd feed the
-				// initial size to `main_start`. But there seems to be a
-				// race condition. `canvas` doesn't have it's correct size yet.
-				send_resize();
+                    function send_resize() {
+                        var canvas = document.getElementById("canvas");
+                        e.web_window_size_changed(canvas.width, canvas.height);
+                    }
 
-				// Runs the "main loop".
-				function do_main_update() {
-					if (!e.main_update()) {
-						e.main_end();
+                    window.addEventListener(
+                        "resize",
+                        function (event) {
+                            send_resize();
+                        },
+                        true,
+                    );
 
-						// Calls procedures marked with @fini
-						e._end();
-						return;
-					}
-					window.requestAnimationFrame(do_main_update);
-				}
+                    // This can probably be done better: Ideally we'd feed the
+                    // initial size to `main_start`. But there seems to be a
+                    // race condition. `canvas` doesn't have it's correct size yet.
+                    send_resize();
 
-				window.requestAnimationFrame(do_main_update);
-			},
-			print: (function() {
-				var element = document.getElementById("output");
-				if (element) element.value = ''; // clear browser cache
-				return function(text) {
-					if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-					console.log(text);
-					if (element) {
-					  element.value += text + "\n";
-					  element.scrollTop = element.scrollHeight; // focus on bottom
-					}
-				};
-			})(),
-			canvas: (function() {
-				return document.getElementById("canvas");
-			})()
-		};
-	</script>
+                    // Runs the "main loop".
+                    function do_main_update() {
+                        if (!e.main_update()) {
+                            e.main_end();
 
-	<!-- Emscripten injects its javascript here -->
-	{{{ SCRIPT }}}
-</body>
+                            // Calls procedures marked with @fini
+                            e._end();
+                            return;
+                        }
+                        window.requestAnimationFrame(do_main_update);
+                    }
+
+                    window.requestAnimationFrame(do_main_update);
+                },
+                print: (function () {
+                    var element = document.getElementById("output");
+                    if (element) element.value = ""; // clear browser cache
+                    return function (text) {
+                        if (arguments.length > 1)
+                            text = Array.prototype.slice
+                                .call(arguments)
+                                .join(" ");
+                        console.log(text);
+                        if (element) {
+                            element.value += text + "\n";
+                            element.scrollTop = element.scrollHeight; // focus on bottom
+                        }
+                    };
+                })(),
+                canvas: (function () {
+                    return document.getElementById("canvas");
+                })(),
+            };
+        </script>
+
+        <!-- Emscripten injects its javascript here -->
+        {{{ SCRIPT }}}
+    </body>
 </html>

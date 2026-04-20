@@ -17,7 +17,10 @@ chunk_width_f : f32 : chunk_width
 chunk_height_f : f32 : chunk_height
 
 
-Tile_Type :: enum {
+// Backing type is explicit i64 so the serialized file format matches across
+// platforms (default enum backing is `int`, which is 8 bytes on native but
+// 4 bytes on wasm32 — would corrupt reads of the data file on web).
+Tile_Type :: enum i64 {
 	Trail,
 	Solid,
 	Key,
@@ -96,7 +99,7 @@ init_tilemap_by_specifying_chunks :: proc(num_chunks_x, num_chunks_y : int) -> T
 		width = num_chunks_x * chunk_width,
 		height = num_chunks_y * chunk_height,
 		num_chunks_x = num_chunks_x,
-		num_chunks_y = num_chunks_y
+		num_chunks_y = num_chunks_y,
 	}
 	return tilemap
 }

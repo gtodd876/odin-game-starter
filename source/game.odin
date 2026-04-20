@@ -28,9 +28,7 @@ created.
 package game
 
 import "core:fmt"
-import "core:math/linalg"
 import rl "vendor:raylib"
-import hm "core:container/handle_map"
 
 PIXEL_WINDOW_HEIGHT :: 180
 
@@ -40,17 +38,19 @@ PALETTE_2 :: rl.Color{0xA0, 0xA8, 0x40, 0xFF}
 PALETTE_3 :: rl.Color{0x70, 0x80, 0x28, 0xFF}
 PALETTE_4 :: rl.Color{0x40, 0x50, 0x10, 0xFF}
 
-Direction :: enum {
+// Explicit i64 backing so this enum is the same size as the native `int` that
+// wrote the data file — see the note on Tile_Type.
+Direction :: enum i64 {
 	None,
 	Up,
 	Left,
 	Down,
-	Right
+	Right,
 }
 
 Moving_State :: enum {
 	Idle,
-	Moving
+	Moving,
 }
 
 
@@ -113,6 +113,9 @@ Game_State :: struct {
 	raccoon_spawn_delay : f32,
 	game_over: bool,
 	level_complete: bool,
+	// Web-only: true at startup until the user clicks/presses, which both unblocks
+	// the browser's suspended AudioContext and dismisses the start popup.
+	awaiting_audio_unlock: bool,
 }
 
 raccoon_spawn_delay_duration : f32 : 2.0
@@ -222,9 +225,11 @@ draw_debug_overlay :: proc() {
 	}
 	rl.GuiCheckBox({px+136, py+62, 16, 16}, "draw debug", &g.debug.debug_draw)
 
-	// Save / load
-	if rl.GuiButton({px+8,   py+88, 120, 20}, "save (F10)") { t_save_data() }
-	if rl.GuiButton({px+136, py+88, 120, 20}, "load (F11)") { t_load_data(context.temp_allocator) }
+	// Save / load — dev tooling, native only (needs filesystem). Save is disabled
+	// (t_save_data body is commented out in update.odin).
+	when ODIN_OS != .JS {
+		if rl.GuiButton({px+136, py+88, 120, 20}, "load (F11)") { t_load_data(context.temp_allocator) }
+	}
 
 	// Hot reload / restart
 	if rl.GuiButton({px+8,   py+114, 120, 20}, "hot reload (F5)") { g.debug.force_reload_requested  = true }
@@ -256,13 +261,16 @@ draw_debug_overlay :: proc() {
 }
 
 toggle_fullscreen :: proc() {
+	when ODIN_OS == .JS {
+		return // browser handles F11 / fullscreen itself on web
+	}
 	when ODIN_OS == .Darwin {
 		return // we only support fullscreen using maximize button on mac
 	}
 
 
 	WindowFlags :: rl.ConfigFlags { .VSYNC_HINT }
-	
+
 	is_window_borderless := rl.IsWindowState({.BORDERLESS_WINDOWED_MODE})
 	if is_window_borderless {
 		rl.ClearWindowState({.BORDERLESS_WINDOWED_MODE})
@@ -283,7 +291,7 @@ toggle_fullscreen :: proc() {
 @(export)
 game_init_window :: proc() {
 	rl.SetConfigFlags({.WINDOW_RESIZABLE, .VSYNC_HINT})
-	rl.InitWindow(1280, 720, "Cabin Jam 2026")
+	rl.InitWindow(1280, 720, "Lost crab")
 	rl.InitAudioDevice()
 	rl.SetWindowPosition(200, 200)
 	rl.SetTargetFPS(60)
@@ -375,6 +383,13 @@ game_init :: proc() {
 	rl.PauseMusicStream(g.clickies_music)
 	rl.PlayMusicStream(g.dingdings_music)
 	rl.PauseMusicStream(g.dingdings_music)  // held paused at position 0 until first rearrange
+
+	when ODIN_OS == .JS {
+		// Browsers block audio until the user gestures; the "Click me" popup is
+		// just the prompt — the browser auto-resumes its AudioContext on the
+		// click itself. Music streams start normally.
+		g.gs.awaiting_audio_unlock = true
+	}
 
 	t_load_data(context.temp_allocator)
 

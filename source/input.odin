@@ -30,13 +30,23 @@ process_key :: proc(key : rl.KeyboardKey) {
 }
 
 
-process_gamepad_button :: proc(gamepad_id : i32, btn : rl.GamepadButton) {
-	my_gamepad_btn := &g.input_state.gamepads_state.buttons[gamepad_id][btn]
+// Aggregate all 4 physical raylib gamepad slots into our virtual slot 0 by
+// OR-ing pressed/released events. On web, browsers assign the gamepad to an
+// arbitrary slot (often 1, not 0), so the game reads slot 0 regardless of
+// where raylib actually sees the device.
+process_aggregated_gamepad_button :: proc(btn : rl.GamepadButton) {
+	my_gamepad_btn := &g.input_state.gamepads_state.buttons[0][btn]
 
-	if rl.IsGamepadButtonPressed(gamepad_id, btn) {
+	pressed, released: bool
+	for raw_id in i32(0)..<4 {
+		if rl.IsGamepadButtonPressed(raw_id, btn)  do pressed  = true
+		if rl.IsGamepadButtonReleased(raw_id, btn) do released = true
+	}
+
+	if pressed {
 		my_gamepad_btn.ended_down = true
 		my_gamepad_btn.transition_count = 1
-	} else if rl.IsGamepadButtonReleased(gamepad_id, btn) {
+	} else if released {
 		my_gamepad_btn.ended_down = false
 		my_gamepad_btn.transition_count = 1
 	}
@@ -59,10 +69,8 @@ update_all_input_state ::proc() {
 		process_key(rl_key)
 	}
 
-	for gamepad_id in 0..<4 {
-		for gamepad_btn in rl.GamepadButton {
-			process_gamepad_button(i32(gamepad_id), gamepad_btn)
-		}
+	for gamepad_btn in rl.GamepadButton {
+		process_aggregated_gamepad_button(gamepad_btn)
 	}
 }
 

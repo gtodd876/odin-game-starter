@@ -43,6 +43,42 @@ game_update :: proc() {
 }
 
 
+// Web-only startup screen. Shown until the user clicks/presses a button, which
+// (a) dismisses the popup and (b) satisfies the browser's user-gesture
+// requirement so the suspended AudioContext can resume. Self-contained render
+// pipeline so update() can return early without touching gameplay state.
+draw_web_audio_unlock_screen :: proc() {
+	unlock := rl.IsMouseButtonPressed(.LEFT) ||
+	          IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) ||
+	          rl.IsKeyPressed(.ENTER) ||
+	          rl.IsKeyPressed(.SPACE)
+	if unlock {
+		g.gs.awaiting_audio_unlock = false
+	}
+
+	rl.BeginTextureMode(g.render_texture)
+	rl.ClearBackground(PALETTE_3)
+	draw_popup("Click me", "or", "Press A button")
+	rl.EndTextureMode()
+
+	rl.BeginDrawing()
+	defer rl.EndDrawing()
+	rl.ClearBackground(rl.BLACK)
+
+	screen_width  := f32(rl.GetScreenWidth())
+	screen_height := f32(rl.GetScreenHeight())
+	scale := min(
+		screen_width  / f32(g.render_texture.texture.width),
+		screen_height / f32(g.render_texture.texture.height),
+	)
+	ws := f32(g.render_texture.texture.width)  * scale
+	hs := f32(g.render_texture.texture.height) * scale
+
+	src := rl.Rectangle{0, 0, f32(g.render_texture.texture.width), f32(-g.render_texture.texture.height)}
+	dst := rl.Rectangle{(screen_width - ws) / 2, (screen_height - hs) / 2, ws, hs}
+	rl.DrawTexturePro(g.render_texture.texture, src, dst, [2]f32{0,0}, 0, rl.WHITE)
+}
+
 data_file_filename :: "data"
 
 // t_save_data :: proc() {
@@ -63,7 +99,7 @@ data_file_filename :: "data"
 // }
 
 t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
-	
+
 	s : Serializer
 	data, success := read_entire_file_from_path(data_file_filename, allocator)
 	if success {
@@ -73,13 +109,13 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 			fmt.printfln("error serializing reader")
 			return false
 		}
-		
+
 	} else {
 		fmt.printfln("error reading from data file")
 		return false
 	}
-	
-	
+
+
 
 	return true
 }
@@ -528,6 +564,13 @@ update :: proc() {
 		g.run = false
 	}
 
+	when ODIN_OS == .JS {
+		if g.gs.awaiting_audio_unlock {
+			draw_web_audio_unlock_screen()
+			return
+		}
+	}
+
 	// if rl.IsKeyPressed(.F10) do t_save_data()
 
 	{ // swap levels
@@ -552,8 +595,6 @@ update :: proc() {
 		}
 	}
 
-	// TODO (john): Wrap this in a when OS != JS thing
-	// we wont allow recording or playback in web build
 	{ // cycle thru selected tile type
 		tile_type_switch_key := rl.KeyboardKey.M
 		if rl.IsKeyPressed(tile_type_switch_key) {
@@ -561,9 +602,10 @@ update :: proc() {
 		}
 	}
 
-	// TODO(john): maybe also wrap this in a when OS != JS
-	if rl.IsKeyPressed(.F11) {
-		toggle_fullscreen()
+	when ODIN_OS != .JS {
+		if rl.IsKeyPressed(.F11) {
+			toggle_fullscreen()
+		}
 	}
 
 	// load_button := rl.KeyboardKey.F11
@@ -574,7 +616,7 @@ update :: proc() {
 	if g.debug.paused do return
 
 	if g.gs.game_over || g.gs.level_complete {
-		a_pressed := rl.IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) ||
+		a_pressed := IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) ||
 		             rl.IsKeyPressed(.ENTER) ||
 		             rl.IsKeyPressed(.SPACE)
 		if a_pressed {
@@ -594,7 +636,7 @@ update :: proc() {
 		g.gs.elapsed_time += rl.GetFrameTime()
 	}
 
-	{ // editor stuff
+	when ODIN_OS != .JS { // editor stuff — native-only dev tooling
 		mouse_screen := rl.GetMousePosition()
 		mouse_world := rl.GetScreenToWorld2D(mouse_screen, game_camera())
 		mouse_rel_tilemap := mouse_world - tilemap_world_origin(tilemap)
@@ -886,88 +928,88 @@ update :: proc() {
 					i := tile_y*chunk_width + tile_x
 					tile_type := tilemap_chunk[i]
 					switch tile_type {
-						case .Solid: {
-							rect := rl.Rectangle {
-								chunk_pos.x + (tile_size*f32(tile_x)),
-								chunk_pos.y + (tile_size*f32(tile_y)),
-								tile_size,
-								tile_size,
-							}
-							rl.DrawRectangleRec(rect, PALETTE_4)
+					case .Solid: {
+						rect := rl.Rectangle {
+							chunk_pos.x + (tile_size*f32(tile_x)),
+							chunk_pos.y + (tile_size*f32(tile_y)),
+							tile_size,
+							tile_size,
 						}
-						case .Trail: {
-							rect := rl.Rectangle {
-								chunk_pos.x + (tile_size*f32(tile_x)),
-								chunk_pos.y + (tile_size*f32(tile_y)),
-								tile_size,
-								tile_size,
-							}
-							rl.DrawRectangleRec(rect, PALETTE_1)
+						rl.DrawRectangleRec(rect, PALETTE_4)
+					}
+					case .Trail: {
+						rect := rl.Rectangle {
+							chunk_pos.x + (tile_size*f32(tile_x)),
+							chunk_pos.y + (tile_size*f32(tile_y)),
+							tile_size,
+							tile_size,
 						}
-						case .Key:{
-							rect := rl.Rectangle {
-								chunk_pos.x + (tile_size*f32(tile_x)),
-								chunk_pos.y + (tile_size*f32(tile_y)),
-								tile_size,
-								tile_size,
-							}
-							rl.DrawRectangleRec(rect, PALETTE_1)
-							wpos := [2]f32 {
-								chunk_pos.x + (tile_size*f32(tile_x)),
-								chunk_pos.y + (tile_size*f32(tile_y)),
-							}
-							rl.DrawTextureV(g.key_texture, wpos, rl.WHITE)
+						rl.DrawRectangleRec(rect, PALETTE_1)
+					}
+					case .Key:{
+						rect := rl.Rectangle {
+							chunk_pos.x + (tile_size*f32(tile_x)),
+							chunk_pos.y + (tile_size*f32(tile_y)),
+							tile_size,
+							tile_size,
 						}
-						case .Lock: {
-							rect := rl.Rectangle {
-								chunk_pos.x + (tile_size*f32(tile_x)),
-								chunk_pos.y + (tile_size*f32(tile_y)),
-								tile_size,
-								tile_size,
-							}
-							rl.DrawRectangleRec(rect, PALETTE_1)
-							wpos := [2]f32 {
-								chunk_pos.x + (tile_size*f32(tile_x)),
-								chunk_pos.y + (tile_size*f32(tile_y)),
-							}
-							rl.DrawTextureV(g.lock_texture, wpos, rl.WHITE)
+						rl.DrawRectangleRec(rect, PALETTE_1)
+						wpos := [2]f32 {
+							chunk_pos.x + (tile_size*f32(tile_x)),
+							chunk_pos.y + (tile_size*f32(tile_y)),
 						}
-						case .Flag : {
-							rect := rl.Rectangle {
-								chunk_pos.x + (tile_size*f32(tile_x)),
-								chunk_pos.y + (tile_size*f32(tile_y)),
-								tile_size,
-								tile_size,
-							}
-							rl.DrawRectangleRec(rect, PALETTE_1)
-							wpos := [2]f32 {
-								chunk_pos.x + (tile_size*f32(tile_x)),
-								chunk_pos.y + (tile_size*f32(tile_y)),
-							}
-							rl.DrawTextureV(g.flag_texture, wpos, rl.WHITE)
+						rl.DrawTextureV(g.key_texture, wpos, rl.WHITE)
+					}
+					case .Lock: {
+						rect := rl.Rectangle {
+							chunk_pos.x + (tile_size*f32(tile_x)),
+							chunk_pos.y + (tile_size*f32(tile_y)),
+							tile_size,
+							tile_size,
 						}
-						case .Whatever: {
-							rect := rl.Rectangle {
-								chunk_pos.x + (tile_size*f32(tile_x)),
-								chunk_pos.y + (tile_size*f32(tile_y)),
-								tile_size,
-								tile_size,
-							}
-							rl.DrawRectangleRec(rect, rl.WHITE)
+						rl.DrawRectangleRec(rect, PALETTE_1)
+						wpos := [2]f32 {
+							chunk_pos.x + (tile_size*f32(tile_x)),
+							chunk_pos.y + (tile_size*f32(tile_y)),
 						}
+						rl.DrawTextureV(g.lock_texture, wpos, rl.WHITE)
+					}
+					case .Flag : {
+						rect := rl.Rectangle {
+							chunk_pos.x + (tile_size*f32(tile_x)),
+							chunk_pos.y + (tile_size*f32(tile_y)),
+							tile_size,
+							tile_size,
+						}
+						rl.DrawRectangleRec(rect, PALETTE_1)
+						wpos := [2]f32 {
+							chunk_pos.x + (tile_size*f32(tile_x)),
+							chunk_pos.y + (tile_size*f32(tile_y)),
+						}
+						rl.DrawTextureV(g.flag_texture, wpos, rl.WHITE)
+					}
+					case .Whatever: {
+						rect := rl.Rectangle {
+							chunk_pos.x + (tile_size*f32(tile_x)),
+							chunk_pos.y + (tile_size*f32(tile_y)),
+							tile_size,
+							tile_size,
+						}
+						rl.DrawRectangleRec(rect, rl.WHITE)
+					}
 					}
 				}
 			}
 
 			chunk_rect := rl.Rectangle {
-				chunk_pos.x, chunk_pos.y, chunk_width_in_units, chunk_height_in_units
+				chunk_pos.x, chunk_pos.y, chunk_width_in_units, chunk_height_in_units,
 			}
-			color := PALETTE_3
-			color.a = 20
+			chunk_color := PALETTE_3
+			chunk_color.a = 20
 			if g.gs.is_rearranging_chunks {
-				color.a = 200
+				chunk_color.a = 200
 			}
-			rl.DrawRectangleLinesEx(chunk_rect, 4, color)
+			rl.DrawRectangleLinesEx(chunk_rect, 4, chunk_color)
 			// Note(john) using term chunk id to refer to the 2D index
 			// which can really be thought of as an integer coordinate
 			// system
@@ -1006,9 +1048,6 @@ update :: proc() {
 			}
 		}
 	}
-
-	chunk_pos := [2]f32 {0, 0}
-
 
 	{ // DRAW CRAB
 		tex := g.crabby_texture
@@ -1112,10 +1151,10 @@ update :: proc() {
 	{ // instructions and ui guide stuff outside of camera
 		if g.gs.current_level_index >= 2 {
 			hidden_pos :=  [2]f32{
-				f32(g.render_texture.texture.width) + 100, 100
+				f32(g.render_texture.texture.width) + 100, 100,
 			}
 			visible_pos := [2]f32{
-				f32(g.render_texture.texture.width) - 150, 100
+				f32(g.render_texture.texture.width) - 150, 100,
 			}
 
 			dpad_hidden_pos := hidden_pos
@@ -1150,7 +1189,6 @@ update :: proc() {
 			sandcastle_1_tex := g.sandcastle_deco_1_texture
 
 			p := 1.0 - ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
-			p_inverse := ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
 
 			a_p := 1.0 - ((g.gs.swap_selection_change_timer / zoom_timer_duration_sec)*(g.gs.swap_selection_change_timer / zoom_timer_duration_sec))*(g.gs.swap_selection_change_timer / zoom_timer_duration_sec)
 
@@ -1166,9 +1204,6 @@ update :: proc() {
 			bottom_deco_pos := [2]f32{}
 
 			if g.gs.is_rearranging_chunks {
-				hold_tex_p := p
-				release_tex_p := p_inverse
-
 				hold_tex_pos = linalg.lerp(visible_pos, hidden_pos, p)
 				dpad_tex_pos = linalg.lerp(dpad_hidden_pos, dpad_visible_pos, p)
 				dpad_crab_walk_tex_pos = linalg.lerp(dpad_visible_pos, dpad_hidden_pos, p)
@@ -1195,9 +1230,6 @@ update :: proc() {
 					a_swap_tex_pos = linalg.lerp(a_visible_pos, a_hidden_pos, a_p)
 				}
 			} else {
-				hold_tex_p := p_inverse
-				release_tex_p := p
-
 				release_tex_pos = linalg.lerp(visible_pos, hidden_pos, p)
 				hold_tex_pos = linalg.lerp(hidden_pos, visible_pos, p)
 
@@ -1281,9 +1313,9 @@ update :: proc() {
 	} else if g.gs.level_complete && g.gs.current_level_index == num_levels - 1 {
 		draw_popup(
 			"You Win",
-			"by John Blat and Todd Matthews",
+			"by Johnny Alfonso and Todd Matthews",
 			"Hit A to play again",
-			middle2 = "Crabin Jam 2026",
+			middle2 = "Thank you for playing!",
 		)
 	} else if g.gs.level_complete {
 		time_str := fmt.ctprintf("%02d:%02d", minutes, seconds)
@@ -1324,7 +1356,6 @@ update :: proc() {
 		if g.irs.is_playback {
 			rl.DrawText("Playback", 10, 10, 20, rl.WHITE)
 		}
-
 
 		draw_debug_overlay()
 

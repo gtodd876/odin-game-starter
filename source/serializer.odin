@@ -20,7 +20,6 @@ import "core:mem"
 import "base:runtime"
 import "core:slice"
 import sa "core:container/small_array"
-import hm "core:container/handle_map"
 
 _ :: fmt // fmt is used only for debug printing
 
@@ -291,7 +290,14 @@ serialize_basic :: proc(
 when SERIALIZER_ENABLE_GENERIC {
     serialize_array :: proc(s: ^Serializer, data: ^$T/[$S]$E, loc := #caller_location) -> bool {
         serializer_debug_scope(s, fmt.tprint(typeid_of(T)))
-        when intrinsics.type_is_numeric(E) {
+        // Pointer-sized integer types (`int`/`uint`/`uintptr`) differ in size
+        // across 32-bit vs 64-bit targets, so iterate so `serialize_number`
+        // can normalize each element to i64 (matches what native wrote).
+        when E == int || E == uint || E == uintptr {
+            for &v in data {
+                serialize(s, &v, loc) or_return
+            }
+        } else when intrinsics.type_is_numeric(E) {
             serialize_opaque(s, data, loc) or_return
         } else {
             for &v in data {
@@ -314,7 +320,7 @@ when SERIALIZER_ENABLE_GENERIC {
 
     serialize_string :: proc(s: ^Serializer, data: ^string, loc := #caller_location) -> bool {
         serializer_debug_scope(s, fmt.tprintf("string = \"%s\"", data^))
-        return serialize_opaque_slice(s, transmute(^[]u8)data, loc)
+        return serialize_opaque_slice(s, cast(^[]u8)data, loc)
     }
 
 
@@ -422,8 +428,8 @@ serialize_tilemap :: proc(s : ^Serializer, tilemap : ^Tilemap, loc := #caller_lo
     serialize(s, &s.version, loc) or_return
 
     if !s.is_writing && s.version > SERIALIZER_VERSION_LATEST {
-        fmt.printf("Unsupported version: %d\n", s.version);
-        return false;
+        fmt.printf("Unsupported version: %d\n", s.version)
+        return false
     }
 
     serialize(s, &tilemap.tiles, loc) or_return
@@ -445,8 +451,8 @@ serialize_tilemap_pos :: proc(s : ^Serializer, tilemap_pos : ^Tilemap_Pos, loc :
     serialize(s, &s.version, loc) or_return
 
     if !s.is_writing && s.version > SERIALIZER_VERSION_LATEST {
-        fmt.printf("Unsupported version: %d\n", s.version);
-        return false;
+        fmt.printf("Unsupported version: %d\n", s.version)
+        return false
     }
 
     
@@ -465,8 +471,8 @@ serialize_raccoon :: proc(s : ^Serializer, r : ^Raccoon, loc := #caller_location
     serialize(s, &s.version, loc) or_return
 
     if !s.is_writing && s.version > SERIALIZER_VERSION_LATEST {
-        fmt.printf("Unsupported version: %d\n", s.version);
-        return false;
+        fmt.printf("Unsupported version: %d\n", s.version)
+        return false
     }
 
     serialize(s, &r.active, loc) or_return
@@ -484,8 +490,8 @@ serialize_level :: proc(s : ^Serializer, level : ^Level, loc := #caller_location
     serialize(s, &s.version, loc) or_return
 
     if !s.is_writing && s.version > SERIALIZER_VERSION_LATEST {
-        fmt.printf("Unsupported version: %d\n", s.version);
-        return false;
+        fmt.printf("Unsupported version: %d\n", s.version)
+        return false
     }
 
     serialize(s, &level.tilemap, loc) or_return
