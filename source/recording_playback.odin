@@ -1,3 +1,5 @@
+#+build !wasm32, !wasm64p32
+
 package game
 
 import "core:os"
@@ -25,6 +27,21 @@ slot_filenames := [?] string {
     "recording_8",
     "recording_9",
 }
+
+
+cycle_record_playback :: proc() {
+    if g.irs.is_playback {
+        end_input_playback(&g.irs)
+        g.old_input_state = {}
+    } else if g.irs.is_recording {
+        end_recording_input(&g.irs)
+        begin_input_playback(&g.irs, &g.gs)
+        g.irs.playback_frame = 0
+    } else {
+        begin_recording_input(&g.irs, &g.gs)
+    }
+}
+
 
 
 begin_recording_input :: proc(rs : ^Input_Recording_State, s : ^Game_State) {

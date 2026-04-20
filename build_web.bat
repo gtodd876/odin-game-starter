@@ -1,7 +1,7 @@
 @echo off
 
 :: Point this to where you installed emscripten.
-set EMSCRIPTEN_SDK_DIR=c:\SDK\emsdk
+set EMSCRIPTEN_SDK_DIR=c:\emsdk
 set OUT_DIR=build\web
 
 if not exist %OUT_DIR% mkdir %OUT_DIR%
@@ -18,7 +18,7 @@ if exist "%EMSCRIPTEN_SDK_DIR%\emsdk_env.bat" (
 :: up in env.o
 ::
 :: Note that there is a rayGUI equivalent: -define:RAYGUI_WASM_LIB=env.o
-odin build source\main_web -target:js_wasm32 -build-mode:obj -define:RAYLIB_WASM_LIB=env.o -define:RAYGUI_WASM_LIB=env.o -vet -strict-style -out:%OUT_DIR%\game.wasm.o
+odin build source\main_web -target:js_wasm32 -build-mode:obj -define:RAYLIB_WASM_LIB=env.o -define:RAYGUI_WASM_LIB=env.o -out:%OUT_DIR%\game.wasm.o
 IF %ERRORLEVEL% NEQ 0 exit /b 1
 
 for /f "delims=" %%i in ('odin root') do set "ODIN_PATH=%%i"

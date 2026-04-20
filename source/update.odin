@@ -9,7 +9,6 @@ import "base:intrinsics"
 import "base:runtime"
 import "core:fmt"
 import "core:math"
-import "core:os"
 import "core:math/linalg"
 
 @(export)
@@ -46,38 +45,41 @@ game_update :: proc() {
 
 data_file_filename :: "data"
 
-t_save_data :: proc() {
+// t_save_data :: proc() {
 
-	g.gs.level.crab_start_pos = g.gs.crab
-	g.gs.level.raccoon_start_pool = g.gs.raccoon_pool
+// 	g.gs.level.crab_start_pos = g.gs.crab
+// 	g.gs.level.raccoon_start_pool = g.gs.raccoon_pool
 
-	g.levels[g.gs.current_level_index] = g.gs.level
-	g.initial_current_level = g.gs.level
+// 	g.levels[g.gs.current_level_index] = g.gs.level
+// 	g.initial_current_level = g.gs.level
 
-	s : Serializer
-	serializer_init_writer(&s, allocator = context.temp_allocator)
-	serialize(&s, &g.levels)
-	werr := os.write_entire_file(data_file_filename, s.data[:])
-	if werr != nil {
-		fmt.printfln("error writing file to data file")
-	}
-}
+// 	s : Serializer
+// 	serializer_init_writer(&s, allocator = context.temp_allocator)
+// 	serialize(&s, &g.levels)
+// 	werr := os.write_entire_file(data_file_filename, s.data[:])
+// 	if werr != nil {
+// 		fmt.printfln("error writing file to data file")
+// 	}
+// }
 
 t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
-	if os.exists(data_file_filename) {
-		s : Serializer
-		data, rerr := os.read_entire_file_from_path(data_file_filename, allocator)
-		if rerr != nil {
-			fmt.printfln("error reading from data file")
-			return false
-		}
+	
+	s : Serializer
+	data, success := read_entire_file_from_path(data_file_filename, allocator)
+	if success {
 		serializer_init_reader(&s, data[:])
 		ok := serialize(&s, &g.levels)
 		if !ok  {
 			fmt.printfln("error serializing reader")
 			return false
 		}
+		
+	} else {
+		fmt.printfln("error reading from data file")
+		return false
 	}
+	
+	
 
 	return true
 }
@@ -193,23 +195,6 @@ swap_to_level :: proc(i: int) {
 // }
 
 raccoon_move_speed : f32 = 3.0
-
-
-
-cycle_record_playback :: proc() {
-	if g.irs.is_playback {
-		end_input_playback(&g.irs)
-		g.old_input_state = {}
-	} else if g.irs.is_recording {
-		end_recording_input(&g.irs)
-		begin_input_playback(&g.irs, &g.gs)
-		g.irs.playback_frame = 0
-	} else {
-		begin_recording_input(&g.irs, &g.gs)
-	}
-}
-
-
 
 
 direction_vector :: proc(d: Direction) -> [2]int {
@@ -567,6 +552,8 @@ update :: proc() {
 		}
 	}
 
+	// TODO (john): Wrap this in a when OS != JS thing
+	// we wont allow recording or playback in web build
 	{ // cycle thru selected tile type
 		tile_type_switch_key := rl.KeyboardKey.M
 		if rl.IsKeyPressed(tile_type_switch_key) {
@@ -574,6 +561,7 @@ update :: proc() {
 		}
 	}
 
+	// TODO(john): maybe also wrap this in a when OS != JS
 	if rl.IsKeyPressed(.F11) {
 		toggle_fullscreen()
 	}
