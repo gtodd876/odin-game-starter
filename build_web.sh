@@ -29,7 +29,7 @@ files="$OUT_DIR/game.wasm.o vendor/raylib/wasm/libraylib.a vendor/raylib/wasm/li
 
 # index_template.html contains the javascript code that calls the procedures in
 # source/main_web/main_web.odin
-flags="-sUSE_GLFW=3 -sWASM_BIGINT -sWARN_ON_UNDEFINED_SYMBOLS=0 -sASSERTIONS -O3 -sEXPORTED_RUNTIME_METHODS=HEAPF32,HEAPU8 --shell-file source/main_web/index_template.html --preload-file assets --preload-file data"
+flags="-sUSE_GLFW=3 -sWASM_BIGINT -sWARN_ON_UNDEFINED_SYMBOLS=0 -sASSERTIONS -O3 -sALLOW_MEMORY_GROWTH -sEXPORTED_RUNTIME_METHODS=HEAPF32,HEAPU8 --shell-file source/main_web/index_template.html --preload-file assets --preload-file data"
 
 # For debugging: Add `-g` to `emcc` (gives better error callstack in chrome)
 emcc -o $OUT_DIR/index.html $files $flags

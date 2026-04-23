@@ -28,6 +28,7 @@ game_update :: proc() {
 
 	g.old_input_state = g.input_state
 
+	rl.SetMusicVolume(g.drone_music, 0.15)
 	rl.UpdateMusicStream(g.drone_music)
 	rl.UpdateMusicStream(g.clickies_music)
 	rl.UpdateMusicStream(g.dingdings_music)
@@ -615,26 +616,82 @@ update :: proc() {
 
 	if g.debug.paused do return
 
-	if g.gs.game_over || g.gs.level_complete {
-		a_pressed := IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) ||
-		             rl.IsKeyPressed(.ENTER) ||
-		             rl.IsKeyPressed(.SPACE)
-		if a_pressed {
-			next_i := g.gs.current_level_index
-			if g.gs.level_complete {
-				// Last-level completion loops back to level 0 for the "You Win" restart.
-				next_i = g.gs.current_level_index == num_levels - 1 ? 0 : g.gs.current_level_index + 1
-			}
-			swap_to_level(next_i)
-			g.gs.num_keys_crab_has = 0
-			g.gs.elapsed_time      = 0
-			g.gs.move_state        = .Idle
-			g.gs.current_direction = .None
-			g.gs.queued_direction  = .None
+	is_in_transition_popup := g.gs.game_over || g.gs.level_complete
+
+	if !is_in_transition_popup{
+		enter_rearrange_keys := [?]rl.KeyboardKey{.Z, .LEFT_SHIFT, .RIGHT_SHIFT}
+		enter_rearrange_mode_button := rl.GamepadButton.RIGHT_TRIGGER_1
+
+		enter_rearrange_mode := IsAnyKeysPressed(..enter_rearrange_keys[:]) ||
+			IsGamepadButtonPressed(0, enter_rearrange_mode_button)
+
+		if enter_rearrange_mode {
+			g.gs.is_rearranging_chunks = true
+			g.gs.zoom_timer = zoom_timer_duration_sec
+			play_sound_by_name("zoom-out")
+			rl.PauseMusicStream(g.drone_music)
+			rl.ResumeMusicStream(g.dingdings_music)
 		}
-	} else {
-		g.gs.elapsed_time += rl.GetFrameTime()
+
+		if g.gs.is_rearranging_chunks {
+			exit_rearrange_mode := IsAnyKeysReleased(..enter_rearrange_keys[:]) ||
+				IsGamepadButtonReleased(0, enter_rearrange_mode_button)
+
+			if exit_rearrange_mode {
+				g.gs.is_rearranging_chunks = false
+				g.gs.is_chunk_selection_active = false
+				g.gs.zoom_timer = zoom_timer_duration_sec
+				play_sound_by_name("zoom-in")
+				rl.ResumeMusicStream(g.drone_music)
+				rl.PauseMusicStream(g.dingdings_music)
+			}
+
+		}
+
+			
+		if IsGamepadButtonPressed(0, .LEFT_TRIGGER_1) {
+			if g.gs.is_rearranging_chunks {
+				g.gs.is_chunk_selection_active = false
+				rl.ResumeMusicStream(g.drone_music)
+				rl.PauseMusicStream(g.dingdings_music)
+			} else {
+				rl.PauseMusicStream(g.drone_music)
+				rl.ResumeMusicStream(g.dingdings_music)
+			}
+			g.gs.is_rearranging_chunks = !g.gs.is_rearranging_chunks
+			g.gs.zoom_timer = zoom_timer_duration_sec
+		}
+
+
+		crab_wpos : = tilemap_pos_to_world_pos(tilemap, g.gs.crab)
+
+
+		if g.gs.zoom_timer > 0 {
+			g.gs.zoom_timer -= rl.GetFrameTime()
+			if g.gs.zoom_timer < 0 do g.gs.zoom_timer = 0
+			p := 1.0 - ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
+			if g.gs.is_rearranging_chunks {
+				g.gs.camera_target = linalg.lerp(crab_wpos, [2]f32{0,0}, p)
+				g.gs.camera_zoom = linalg.lerp(f32(1.0), camera_zoom_rearrange_mode, p)
+			} else {
+				g.gs.camera_target = linalg.lerp([2]f32{0,0}, crab_wpos, p)
+				g.gs.camera_zoom = linalg.lerp(camera_zoom_rearrange_mode, f32(1.0), p)
+			}
+		} else {
+			if g.gs.is_rearranging_chunks {
+				g.gs.camera_target = {}
+			} else {
+				g.gs.camera_target = crab_wpos
+			}
+		}
+
+		if g.gs.swap_selection_change_timer > 0 {
+			g.gs.swap_selection_change_timer -= rl.GetFrameTime()
+			if g.gs.swap_selection_change_timer < 0 do g.gs.swap_selection_change_timer = 0
+		}
 	}
+
+	
 
 	when ODIN_OS != .JS { // editor stuff — native-only dev tooling
 		mouse_screen := rl.GetMousePosition()
@@ -698,92 +755,32 @@ update :: proc() {
 
 	}
 
-	{
-		enter_rearrange_mode_key := rl.KeyboardKey.Z
-		enter_rearrange_mode_button := rl.GamepadButton.RIGHT_TRIGGER_1
-
-
-		if IsKeyPressed(enter_rearrange_mode_key) || IsGamepadButtonPressed(0, enter_rearrange_mode_button) {
-			g.gs.is_rearranging_chunks = true
-			g.gs.zoom_timer = zoom_timer_duration_sec
-			play_sound_by_name("zoom-out")
-			rl.PauseMusicStream(g.drone_music)
-			rl.ResumeMusicStream(g.dingdings_music)
-		}
-
-		if IsKeyReleased(enter_rearrange_mode_key) || IsGamepadButtonReleased(0, enter_rearrange_mode_button) {
-			g.gs.is_rearranging_chunks = false
-			g.gs.is_chunk_selection_active = false
-			g.gs.zoom_timer = zoom_timer_duration_sec
-			play_sound_by_name("zoom-in")
-			rl.ResumeMusicStream(g.drone_music)
-			rl.PauseMusicStream(g.dingdings_music)
-		}
-
-		if IsGamepadButtonPressed(0, .LEFT_TRIGGER_1) {
-			if g.gs.is_rearranging_chunks {
-				g.gs.is_chunk_selection_active = false
-				rl.ResumeMusicStream(g.drone_music)
-				rl.PauseMusicStream(g.dingdings_music)
-			} else {
-				rl.PauseMusicStream(g.drone_music)
-				rl.ResumeMusicStream(g.dingdings_music)
-			}
-			g.gs.is_rearranging_chunks = !g.gs.is_rearranging_chunks
-			g.gs.zoom_timer = zoom_timer_duration_sec
-		}
-
-
-		crab_wpos : = tilemap_pos_to_world_pos(tilemap, g.gs.crab)
-
-
-		if g.gs.zoom_timer > 0 {
-			g.gs.zoom_timer -= rl.GetFrameTime()
-			if g.gs.zoom_timer < 0 do g.gs.zoom_timer = 0
-			p := 1.0 - ((g.gs.zoom_timer / zoom_timer_duration_sec)*(g.gs.zoom_timer / zoom_timer_duration_sec))*(g.gs.zoom_timer / zoom_timer_duration_sec)
-			if g.gs.is_rearranging_chunks {
-				g.gs.camera_target = linalg.lerp(crab_wpos, [2]f32{0,0}, p)
-				g.gs.camera_zoom = linalg.lerp(f32(1.0), camera_zoom_rearrange_mode, p)
-			} else {
-				g.gs.camera_target = linalg.lerp([2]f32{0,0}, crab_wpos, p)
-				g.gs.camera_zoom = linalg.lerp(camera_zoom_rearrange_mode, f32(1.0), p)
-			}
-		} else {
-			if g.gs.is_rearranging_chunks {
-				g.gs.camera_target = {}
-			} else {
-				g.gs.camera_target = crab_wpos
-			}
-		}
-
-		if g.gs.swap_selection_change_timer > 0 {
-			g.gs.swap_selection_change_timer -= rl.GetFrameTime()
-			if g.gs.swap_selection_change_timer < 0 do g.gs.swap_selection_change_timer = 0
-		}
-	}
+	
 
 	if g.gs.is_rearranging_chunks {
-		if IsKeyPressed(.UP) || IsGamepadButtonPressed(0, .LEFT_FACE_UP) {
+		if IsAnyKeysPressed(.UP, .W) || IsGamepadButtonPressed(0, .LEFT_FACE_UP) {
 			play_sound_by_name("ui-move-1")
 			g.gs.hovered_chunk.y -= 1
 		}
-		if IsKeyPressed(.DOWN) || IsGamepadButtonPressed(0, .LEFT_FACE_DOWN) {
+		if IsAnyKeysPressed(.DOWN, .S) || IsGamepadButtonPressed(0, .LEFT_FACE_DOWN) {
 			play_sound_by_name("ui-move-1")
 
 			g.gs.hovered_chunk.y += 1
 		}
-		if IsKeyPressed(.LEFT) || IsGamepadButtonPressed(0, .LEFT_FACE_LEFT) {
+		if IsAnyKeysPressed(.LEFT, .A) || IsGamepadButtonPressed(0, .LEFT_FACE_LEFT) {
 			play_sound_by_name("ui-move-1")
 
 			g.gs.hovered_chunk.x -= 1
 		}
-		if IsKeyPressed(.RIGHT) || IsGamepadButtonPressed(0, .LEFT_FACE_RIGHT) {
+		if IsAnyKeysPressed(.RIGHT, .D) || IsGamepadButtonPressed(0, .LEFT_FACE_RIGHT) {
 			play_sound_by_name("ui-move-1")
 
 			g.gs.hovered_chunk.x += 1
 		}
 
-		if IsKeyPressed(.SPACE) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) {
+		swap_chunk := IsAnyKeysPressed(.SPACE, .X) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN)
+
+		if swap_chunk {
 			if g.gs.is_chunk_selection_active {
 				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
 
@@ -832,12 +829,12 @@ update :: proc() {
 	g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
 	g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
 
-	@(static) paused : bool
-	if rl.IsKeyPressed(.ENTER) {
-		paused = !paused
-	}
+	// @(static) paused : bool
+	// if rl.IsKeyPressed(.ENTER) {
+	// 	paused = !paused
+	// }
 
-	if !paused {
+	{
 		update_crab()
 		update_raccoon()
 	}
@@ -1323,6 +1320,35 @@ update :: proc() {
 	}
 
 	rl.EndTextureMode()
+
+
+	if is_in_transition_popup {
+		// NOTE(john): putting this at the very bottom,
+		// but really it just needs to not affect the camera, 
+		// because otherwise, for one frame,
+		// the camera would be set to the tilemap 0,0 
+		// and not the crab center
+		// IOW, this creates a state where the camera doesn't get centered on the crab properly,
+		// and im not sure exactly why,
+		// but moving it down here def fixes it for now
+		a_pressed := IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN) ||
+					IsAnyKeysPressed(.ENTER, .SPACE, .Z, .X)
+		if a_pressed {
+			next_i := g.gs.current_level_index
+			if g.gs.level_complete {
+				// Last-level completion loops back to level 0 for the "You Win" restart.
+				next_i = g.gs.current_level_index == num_levels - 1 ? 0 : g.gs.current_level_index + 1
+			}
+			swap_to_level(next_i)
+			g.gs.num_keys_crab_has = 0
+			g.gs.elapsed_time      = 0
+			g.gs.move_state        = .Idle
+			g.gs.current_direction = .None
+			g.gs.queued_direction  = .None
+		}
+	} else {
+		g.gs.elapsed_time += rl.GetFrameTime()
+	}
 
 
 	{ // DRAW TO WINDOW

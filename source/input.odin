@@ -74,6 +74,22 @@ update_all_input_state ::proc() {
 	}
 }
 
+IsAnyKeysPressed :: proc(keys : ..rl.KeyboardKey) -> bool {
+	ret := false
+	for key in keys {
+		ret |= IsKeyPressed(key)
+	}
+	return ret
+}
+
+IsAnyKeysReleased :: proc(keys : ..rl.KeyboardKey) -> bool {
+	ret := false
+	for key in keys {
+		ret |= IsKeyReleased(key)
+	}
+	return ret
+}
+
 IsKeyPressed :: proc(key : rl.KeyboardKey) -> bool {
 	ret := g.input_state.keyboard_keys_state[key].ended_down == true &&
 		g.input_state.keyboard_keys_state[key].transition_count > 0
