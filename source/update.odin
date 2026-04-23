@@ -648,7 +648,7 @@ update :: proc() {
 
 		}
 
-			
+
 		if IsGamepadButtonPressed(0, .LEFT_TRIGGER_1) {
 			if g.gs.is_rearranging_chunks {
 				g.gs.is_chunk_selection_active = false
@@ -691,7 +691,7 @@ update :: proc() {
 		}
 	}
 
-	
+
 
 	when ODIN_OS != .JS { // editor stuff — native-only dev tooling
 		mouse_screen := rl.GetMousePosition()
@@ -755,7 +755,7 @@ update :: proc() {
 
 	}
 
-	
+
 
 	if g.gs.is_rearranging_chunks {
 		if IsAnyKeysPressed(.UP, .W) || IsGamepadButtonPressed(0, .LEFT_FACE_UP) {
@@ -1128,7 +1128,7 @@ update :: proc() {
         }
 		rl.DrawTextEx(g.lcd_font, text, pos, font_size, spacing, PALETTE_4)
 
-		sub_text : cstring = "Great Sand Labyrnith"
+		sub_text : cstring = "Great Sand Labyrinth"
     	sub_font_size : f32 = 56
     	sub_spacing   : f32 = 2
     	sub_size := rl.MeasureTextEx(g.lcd_font, sub_text, sub_font_size, sub_spacing)
@@ -1287,23 +1287,42 @@ update :: proc() {
 	palete_1_a := PALETTE_1
 	palete_1_a.a = 200
 
-	hud_rect := rl.Rectangle{ 8, 8, f32(g.render_texture.texture.width) / 6, 120 }
-	rl.DrawRectangleRounded       (hud_rect, 0.15, 8,    palete_1_a)
-	rl.DrawRectangleRoundedLinesEx(hud_rect, 0.15, 8, 3, PALETTE_4)
+	hud_x       : f32 = 8
+	hud_y       : f32 = 8
+	hud_padding : f32 = 16
+	spacing     : f32 = 2
+
+	time_label_font : f32 = 40
+	time_value_font : f32 = 72
+	level_font      : f32 = 40
 
 	minutes := int(g.gs.elapsed_time) / 60
 	seconds := int(g.gs.elapsed_time) % 60
+	time_value_text := fmt.ctprintf("%02d:%02d", minutes, seconds)
+	level_text      := fmt.ctprintf("Level %d", g.gs.current_level_index + 1)
 
+	time_label_width := rl.MeasureTextEx(g.lcd_font, "TIME", time_label_font, spacing).x
+	time_value_width := rl.MeasureTextEx(g.lcd_font, time_value_text, time_value_font, spacing).x
+	level_width      := rl.MeasureTextEx(g.lcd_font, level_text, level_font, spacing).x
+	content_width    := max(time_label_width, time_value_width, level_width)
+	content_height    := time_label_font + time_value_font + level_font
 
-	rl.DrawTextEx(g.lcd_font, "TIME", {20, 12}, 40, 2, PALETTE_4)
-	rl.DrawTextEx(
-		g.lcd_font,
-		fmt.ctprintf("%02d:%02d", minutes, seconds),
-		{20, 52},
-		72,
-		2,
-		PALETTE_4,
-	)
+	hud_rect := rl.Rectangle{
+		hud_x, hud_y,
+		content_width + hud_padding * 2,
+		content_height + hud_padding * 2,
+	}
+	rl.DrawRectangleRounded       (hud_rect, 0.15, 8,    palete_1_a)
+	rl.DrawRectangleRoundedLinesEx(hud_rect, 0.15, 8, 3, PALETTE_4)
+
+	text_x       := hud_x + hud_padding
+	time_label_y := hud_y + hud_padding
+	time_value_y := time_label_y + time_label_font
+	level_y      := time_value_y + time_value_font
+
+	rl.DrawTextEx(g.lcd_font, "TIME", {text_x, time_label_y}, time_label_font, spacing, PALETTE_4)
+	rl.DrawTextEx(g.lcd_font, time_value_text, {text_x, time_value_y}, time_value_font, spacing, PALETTE_4)
+	rl.DrawTextEx(g.lcd_font, level_text, {text_x, level_y}, level_font, spacing, PALETTE_4)
 
 	if g.gs.game_over {
 		draw_popup("Racoon got ya", "", "Hit A to play again")
@@ -1324,9 +1343,9 @@ update :: proc() {
 
 	if is_in_transition_popup {
 		// NOTE(john): putting this at the very bottom,
-		// but really it just needs to not affect the camera, 
+		// but really it just needs to not affect the camera,
 		// because otherwise, for one frame,
-		// the camera would be set to the tilemap 0,0 
+		// the camera would be set to the tilemap 0,0
 		// and not the crab center
 		// IOW, this creates a state where the camera doesn't get centered on the crab properly,
 		// and im not sure exactly why,
