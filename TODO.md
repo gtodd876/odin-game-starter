@@ -29,3 +29,7 @@ editortile select lock : Makes current active tile lock instead of whatever it i
 - JAM Version TODO: Fix Raccoon from going into wall if move chunk at the wrong time. When fox is on edge of chunk and started to move into a tile on the next chunk, if you swap the chunk and now the next tile is a solid tile, the fox will enter it before turning around. The fox should instead continuously check if it can still move to the next tile and if not, then it recognizes it can't move there
 
 - Make recording/playback system better. Use a slot system where it can get written into slots.. Example "recording_0," "recording_01," "recording_02," etc, and that they can be swapped, saved and played back. Makes it so that can save multiple recordings, and also share with each other to demonstrate a bug
+
+- come up with standard for dealing with resolutions, target 1080p, but make the game look great across handheld screens all the way up to 4k monitors
+
+- Joystick can move crab in addition to the d-pad
