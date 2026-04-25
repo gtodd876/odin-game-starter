@@ -137,6 +137,7 @@ Raccoon :: struct {
 }
 
 Game_Memory :: struct {
+	dev_paused : bool,
 	sfx_bank : map[string]rl.Sound,
 	drone_music     : rl.Music,
 	clickies_music  : rl.Music,

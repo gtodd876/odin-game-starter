@@ -167,6 +167,21 @@ tilemap_pos_absolute_tile :: proc(cp: Tilemap_Pos) -> [2]int {
 	}
 }
 
+rel_pos_to_chunk_absolute_tile ::proc(rel_pos : [2]f32) -> [2]int {
+	ret := [2]int {
+		int(rel_pos.x) % chunk_width,
+		int(rel_pos.y) % chunk_height
+	}
+	return ret
+}
+
+chunk_tile_to_center_pos :: proc(tile : [2]int) -> [2]f32 {
+	ret := [2]f32 {
+		f32(tile.x) + 0.5, f32(tile.y) + 0.5
+	}
+	return ret
+}
+
 absolute_tile_to_tilemap_pos ::proc(tile_x, tile_y :int) -> Tilemap_Pos {
 	ret := Tilemap_Pos {
         chunk   = [2]int{tile_x / chunk_width, tile_y / chunk_height},

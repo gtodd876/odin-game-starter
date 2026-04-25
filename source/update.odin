@@ -11,6 +11,99 @@ import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 
+blinky_pick_direction2 :: proc(tm : ^Tilemap, entity_tmpos : Tilemap_Pos,
+	curr_dir : Direction, target_tile : [2]int) -> Direction {
+	
+	next_dir := curr_dir
+	
+	current_entity_tile := tilemap_pos_absolute_tile(entity_tmpos)
+
+	adjacent_tiles : [Direction][2]int
+	adjacent_tiles[.None] = current_entity_tile
+
+	adjacent_tiles[.Left] = current_entity_tile
+	adjacent_tiles[.Left].x -= 1
+
+	adjacent_tiles[.Right] = current_entity_tile
+	adjacent_tiles[.Right].x += 1
+
+	adjacent_tiles[.Up] = current_entity_tile
+	adjacent_tiles[.Up].y -= 1
+
+	adjacent_tiles[.Down] = current_entity_tile
+	adjacent_tiles[.Down].y += 1
+
+
+
+	adjacent_tile_world_centers : [Direction][2]f32
+
+	for adjacent_tile, dir in adjacent_tiles {
+		wcenter := tile_center_world(tm, adjacent_tile.x, adjacent_tile.y)
+		adjacent_tile_world_centers[dir] = wcenter			
+	}
+
+
+
+	adjacent_tile_distances_from_target_tile := [Direction]f32{}
+	target_wcenter := tile_center_world(tm, target_tile.x, target_tile.y)
+
+	for wcenter, dir in adjacent_tile_world_centers {
+		distance_from_target := linalg.distance(wcenter, target_wcenter)
+		adjacent_tile_distances_from_target_tile[dir] = distance_from_target
+	}
+
+
+
+	closest_tile_direction_to_target := Direction.None
+	closest_distance : f32 = 99999
+
+	// avoids checking opposite direction and .none
+	for distance, dir in adjacent_tile_distances_from_target_tile {
+		tile := adjacent_tiles[dir]
+		
+		in_bounds := tilemap_is_coord_in_bounds(tm, tile.x, tile.y)
+		is_opposite_dir := dir == opposite_direction(curr_dir)
+		is_none := dir == .None
+		is_walkable := tilemap_is_walkable(tm, tile.x, tile.y)
+
+		is_valid_dir := in_bounds && 
+			 !is_opposite_dir &&
+			 !is_none &&
+			 is_walkable
+
+		if is_valid_dir {
+			is_closer := distance < closest_distance
+			if is_closer {
+				closest_distance = distance
+				closest_tile_direction_to_target = dir
+			}
+		}
+	}
+
+	next_tile := current_entity_tile
+
+	did_find_valid_closest_adjacent_tile := closest_tile_direction_to_target != .None
+	if did_find_valid_closest_adjacent_tile {
+		next_tile = adjacent_tiles[closest_tile_direction_to_target]
+		next_dir = closest_tile_direction_to_target
+	}
+	else {
+		raccoon_opposite_direction := opposite_direction(curr_dir)
+		opposite_direction_tile := adjacent_tiles[raccoon_opposite_direction]
+		can_turn_around := tilemap_is_walkable(tm, opposite_direction_tile.x, opposite_direction_tile.y)
+		if can_turn_around {
+			next_tile = adjacent_tiles[raccoon_opposite_direction]
+			next_dir = raccoon_opposite_direction
+		} 
+		else {
+			next_dir = .None
+		}
+	}
+	
+	return next_dir
+}
+
+
 @(export)
 game_update :: proc() {
 	// RECORD THEN IMMEDIATELY PLAYBACK
@@ -199,37 +292,7 @@ swap_to_level :: proc(i: int) {
 	g.gs.num_keys_crab_has = 0
 }
 
-// spawn_raccoon_opposite_crab :: proc() {
-// 	t := &g.gs.level.tilemap
-// 	crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
-// 	target_x := t.width  - 1 - crab_tile.x
-// 	target_y := t.height - 1 - crab_tile.y
 
-// 	// Spiral outward from the opposite corner until we land on a walkable tile.
-// 	// Guaranteed to terminate because the crab's own tile is walkable.
-// 	max_radius := t.width + t.height
-// 	found_x, found_y := target_x, target_y
-// 	search: for radius in 0..=max_radius {
-// 		for dy in -radius..=radius {
-// 			for dx in -radius..=radius {
-// 				if abs(dx) != radius && abs(dy) != radius do continue
-// 				tx := target_x + dx
-// 				ty := target_y + dy
-// 				if tx < 0 || tx >= t.width || ty < 0 || ty >= t.height do continue
-// 				if tx == crab_tile.x && ty == crab_tile.y do continue
-// 				if tilemap_is_walkable(t, tx, ty) {
-// 					found_x = tx
-// 					found_y = ty
-// 					break search
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	g.gs.raccoon = absolute_tile_to_tilemap_pos(found_x, found_y)
-// 	g.gs.raccoon_direction = .None
-// 	raccoon_move_speed = 3.0
-// }
 
 raccoon_move_speed : f32 = 3.0
 
@@ -286,7 +349,7 @@ try_open_adjacent_lock :: proc(t: ^Tilemap, cp: Tilemap_Pos, dir: Direction) -> 
 	return true
 }
 
-update_crab :: proc() {
+update_crab :: proc(dt, speed_mod : f32) {
 	if g.gs.game_over || g.gs.level_complete do return
 	gs := &g.gs
 	t  := &gs.level.tilemap
@@ -338,11 +401,9 @@ update_crab :: proc() {
 	dv := direction_vector(gs.current_direction)
 	dv_f := [2]f32{f32(dv.x), f32(dv.y)}
 	pre_rel := gs.crab.rel_pos
-	move_speed := gs.move_speed
-	if g.gs.is_rearranging_chunks {
-		move_speed *= 0.1
-	}
-	gs.crab.rel_pos += dv_f * move_speed * rl.GetFrameTime()
+	move_speed := gs.move_speed * speed_mod
+
+	gs.crab.rel_pos += dv_f * move_speed * dt
 
 	// 5. Detect tile-center crossing. Tile centers sit at half-integers;
 	// shift by -0.5 so they sit at integers, and a crossing is a change in
@@ -467,7 +528,17 @@ blinky_pick_direction :: proc(t: ^Tilemap, from: Tilemap_Pos, target: [2]int, cu
 	return best
 }
 
-update_raccoon :: proc() {
+is_between :: proc(val, bound_a, bound_b : f32) -> bool {
+	lo := min(bound_a, bound_b)
+	hi := max(bound_a, bound_b)
+	ret := false
+	if lo < val && val <= hi {
+		ret = true
+	}
+	return ret
+}
+
+update_raccoon :: proc(dt, speed_mod : f32) {
 	if g.gs.game_over || g.gs.level_complete do return
 
 	if g.gs.raccoon_spawn_delay > 0 {
@@ -492,62 +563,59 @@ update_raccoon :: proc() {
 
 		dv := direction_vector(raccoon.direction)
 		dv_f := [2]f32{f32(dv.x), f32(dv.y)}
-		pre_rel := raccoon.pos.rel_pos
-		move_speed := raccoon_move_speed
-		if g.gs.is_rearranging_chunks {
-			move_speed *= 0.1
-		}
-		raccoon.pos.rel_pos += dv_f * move_speed * rl.GetFrameTime()
+		move_speed := raccoon_move_speed * speed_mod
+				
+		old_rel_pos := raccoon.pos.rel_pos		
+		test_new_rel_pos := raccoon.pos.rel_pos + 
+			(dv_f * move_speed * dt)
+		new_rel_pos := test_new_rel_pos
 
-		crossed_cx := raccoon.pos.rel_pos.x
-		crossed_cy := raccoon.pos.rel_pos.y
-		crossed := false
+		curr_chunk_tile := rel_pos_to_chunk_absolute_tile(old_rel_pos)
+		curr_chunk_tile_center_pos := chunk_tile_to_center_pos(curr_chunk_tile)
 
-		if dv.x != 0 {
-			pre_u  := math.floor(pre_rel.x - 0.5)
-			post_u := math.floor(raccoon.pos.rel_pos.x - 0.5)
-			if pre_u != post_u {
-				crossed = true
-				u_cross := dv.x > 0 ? post_u : pre_u
-				crossed_cx = u_cross + 0.5
-			}
-		}
-		if dv.y != 0 {
-			pre_u  := math.floor(pre_rel.y - 0.5)
-			post_u := math.floor(raccoon.pos.rel_pos.y - 0.5)
-			if pre_u != post_u {
-				crossed = true
-				u_cross := dv.y > 0 ? post_u : pre_u
-				crossed_cy = u_cross + 0.5
-			}
+		did_cross_x := is_between(curr_chunk_tile_center_pos.x, old_rel_pos.x, test_new_rel_pos.x)
+		did_cross_y := is_between(curr_chunk_tile_center_pos.y, old_rel_pos.y, test_new_rel_pos.y)
+
+		should_snap_on_curr_tile_center_x := did_cross_x 
+		should_snap_on_curr_tile_center_y := did_cross_y
+		
+		if should_snap_on_curr_tile_center_x {
+			new_rel_pos.x = curr_chunk_tile_center_pos.x
+		} 
+		else if should_snap_on_curr_tile_center_y {
+			new_rel_pos.y = curr_chunk_tile_center_pos.y
 		}
 
-		if !crossed do continue
-
-		// At the crossed tile center: snap, run Blinky AI, resume.
-		saved_rel   := raccoon.pos.rel_pos
-		saved_chunk := raccoon.pos.chunk
-		raccoon.pos.rel_pos = {crossed_cx, crossed_cy}
+		// COMMIT TO NEW POSITION
+		raccoon.pos.rel_pos = new_rel_pos
 		tilemap_pos_normalize_chunk(&raccoon.pos)
 
-		target := tilemap_pos_absolute_tile(gs.crab)
-		next_dir := blinky_pick_direction(t, raccoon.pos, target, raccoon.direction)
+		should_pick_new_direction := did_cross_x || did_cross_y
+		if should_pick_new_direction {
 
-		if next_dir == .None {
-			// Completely boxed in (walls on all sides including behind). Stop here.
-			raccoon.direction = .None
-			continue
-		}
+			target := tilemap_pos_absolute_tile(gs.crab)
+			next_dir := blinky_pick_direction2(t, raccoon.pos, raccoon.direction, target)
 
-		if next_dir == raccoon.direction {
-			// Straight through — preserve overshoot so movement stays smooth.
-			raccoon.pos.rel_pos = saved_rel
-			raccoon.pos.chunk   = saved_chunk
-		} else {
+			overshoot : f32 = 0
+			if did_cross_x {
+				overshoot = abs(test_new_rel_pos.x - curr_chunk_tile_center_pos.x)
+			} else if did_cross_y {
+				overshoot = abs(test_new_rel_pos.y - curr_chunk_tile_center_pos.y)
+			}
+
+			if next_dir == .Left {
+				raccoon.pos.rel_pos.x -= overshoot
+			} else if next_dir == .Right {
+				raccoon.pos.rel_pos.x += overshoot
+			} else if next_dir == .Up {
+				raccoon.pos.rel_pos.y -= overshoot
+			} else if next_dir == .Down {
+				raccoon.pos.rel_pos.y += overshoot
+			}
+
 			raccoon.direction = next_dir
 		}
 	}
-
 }
 
 update :: proc() {
@@ -648,8 +716,9 @@ update :: proc() {
 
 		}
 
-
-		if IsGamepadButtonPressed(0, .LEFT_TRIGGER_1) {
+		toggle_rearrange := IsGamepadButtonPressed(0, .LEFT_TRIGGER_1) ||
+			IsKeyPressed(.C)
+		if toggle_rearrange {
 			if g.gs.is_rearranging_chunks {
 				g.gs.is_chunk_selection_active = false
 				rl.ResumeMusicStream(g.drone_music)
@@ -758,30 +827,37 @@ update :: proc() {
 
 
 	if g.gs.is_rearranging_chunks {
-		if IsAnyKeysPressed(.UP, .W) || IsGamepadButtonPressed(0, .LEFT_FACE_UP) {
+		move_up := IsAnyKeysPressed(.UP, .W) || IsGamepadButtonPressed(0, .LEFT_FACE_UP)
+		move_down := IsAnyKeysPressed(.DOWN, .S) || IsGamepadButtonPressed(0, .LEFT_FACE_DOWN)
+		move_left := IsAnyKeysPressed(.LEFT, .A) || IsGamepadButtonPressed(0, .LEFT_FACE_LEFT)
+		move_right := IsAnyKeysPressed(.RIGHT, .D) || IsGamepadButtonPressed(0, .LEFT_FACE_RIGHT)
+		
+		if move_up {
 			play_sound_by_name("ui-move-1")
 			g.gs.hovered_chunk.y -= 1
 		}
-		if IsAnyKeysPressed(.DOWN, .S) || IsGamepadButtonPressed(0, .LEFT_FACE_DOWN) {
+		if move_down {
 			play_sound_by_name("ui-move-1")
-
 			g.gs.hovered_chunk.y += 1
 		}
-		if IsAnyKeysPressed(.LEFT, .A) || IsGamepadButtonPressed(0, .LEFT_FACE_LEFT) {
+		if move_left {
 			play_sound_by_name("ui-move-1")
-
 			g.gs.hovered_chunk.x -= 1
 		}
-		if IsAnyKeysPressed(.RIGHT, .D) || IsGamepadButtonPressed(0, .LEFT_FACE_RIGHT) {
+		if move_right {
 			play_sound_by_name("ui-move-1")
-
 			g.gs.hovered_chunk.x += 1
 		}
 
-		swap_chunk := IsAnyKeysPressed(.SPACE, .X) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN)
+		g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
+		g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
 
-		if swap_chunk {
-			if g.gs.is_chunk_selection_active {
+		interact := IsAnyKeysPressed(.SPACE, .X) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN)
+		if interact {
+			should_swap_chunk := g.gs.is_chunk_selection_active
+			should_select_chunk := !should_swap_chunk
+
+			if should_swap_chunk {
 				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
 
 				play_sound_by_name("smack")
@@ -810,7 +886,8 @@ update :: proc() {
 				g.gs.player_pos = tilemap_pos_to_world_pos(tilemap, g.gs.crab)
 
 				g.gs.is_chunk_selection_active = false
-			} else {
+			}
+			else if should_select_chunk{
 				play_sound_by_name("put-chunk")
 				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
 				g.gs.is_chunk_selection_active = true
@@ -821,22 +898,21 @@ update :: proc() {
 	}
 
 
-	// NOTE(john) make sure selection stays within the bounds
-	// of the overall chunk arrangemetn
-	//
-	// Also if there are empty tilemaps with 0 dimensions
-	// this will crash
-	g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
-	g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
+	
 
-	// @(static) paused : bool
-	// if rl.IsKeyPressed(.ENTER) {
-	// 	paused = !paused
-	// }
+	if rl.IsKeyPressed(.ENTER) {
+		g.dev_paused = !g.dev_paused
+	}
 
-	{
-		update_crab()
-		update_raccoon()
+	// NOTE(john) This prevents getting way to fast when 
+	// stepping in debugger
+
+	dt := min(rl.GetFrameTime(), 0.1666666)
+	speed_mod : f32 = g.gs.is_rearranging_chunks ? 0.1 : 1.0
+
+	if !g.dev_paused {
+		update_crab(dt, speed_mod)
+		update_raccoon(dt, speed_mod)
 	}
 
 	did_any_raccoons_get_crab := false
@@ -863,11 +939,6 @@ update :: proc() {
 	}
 	g.gs.prev_walking_gameplay = walking_gameplay
 
-	// if !g.gs.game_over && !g.gs.level_complete &&
-	//    g.gs.raccoon_active &&
-	//    tilemap_pos_absolute_tile(g.gs.crab) == tilemap_pos_absolute_tile(g.gs.raccoon) {
-
-	// }
 
 	if !g.gs.game_over && !g.gs.level_complete { // crab reached the flag
 		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
@@ -1032,9 +1103,6 @@ update :: proc() {
 				is_selected := g.gs.is_chunk_selection_active && chunk_id == g.gs.selected_chunk
 				is_hovered  := chunk_id == g.gs.hovered_chunk
 
-				// Selected wins over hovered so the white border shows
-				// immediately on the SPACE-press frame, before the player
-				// moves the cursor off the selected chunk.
 				if is_selected {
 					color = rl.WHITE
 					color.a = 255
@@ -1080,8 +1148,6 @@ update :: proc() {
 	{ // instructions and ui guide stuff in camera
 		if g.gs.current_level_index < 2 {
 			rl.DrawTextureEx(g.dpad_crab_walk_texture, [2]f32{-310, -90}, {}, 0.6, rl.WHITE)
-
-			// rl.DrawTextureV(g.move_crab_sticker_texture, [2]f32{-600, -100}, rl.WHITE)
 		}
 	}
 
