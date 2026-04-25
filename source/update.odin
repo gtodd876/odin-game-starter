@@ -33,7 +33,7 @@ blinky_pick_direction2 :: proc(tm : ^Tilemap, entity_tmpos : Tilemap_Pos,
 	adjacent_tiles[.Down] = current_entity_tile
 	adjacent_tiles[.Down].y += 1
 
-	target_wcenter := tile_center_world(tm, target_tile.x, target_tile.y)
+
 
 	adjacent_tile_world_centers : [Direction][2]f32
 
@@ -42,12 +42,17 @@ blinky_pick_direction2 :: proc(tm : ^Tilemap, entity_tmpos : Tilemap_Pos,
 		adjacent_tile_world_centers[dir] = wcenter			
 	}
 
+
+
 	adjacent_tile_distances_from_target_tile := [Direction]f32{}
+	target_wcenter := tile_center_world(tm, target_tile.x, target_tile.y)
 
 	for wcenter, dir in adjacent_tile_world_centers {
 		distance_from_target := linalg.distance(wcenter, target_wcenter)
 		adjacent_tile_distances_from_target_tile[dir] = distance_from_target
 	}
+
+
 
 	closest_tile_direction_to_target := Direction.None
 	closest_distance : f32 = 99999
@@ -77,18 +82,20 @@ blinky_pick_direction2 :: proc(tm : ^Tilemap, entity_tmpos : Tilemap_Pos,
 
 	next_tile := current_entity_tile
 
-	found_valid_closest_adjacent_tile := closest_tile_direction_to_target != .None
-	if found_valid_closest_adjacent_tile {
+	did_find_valid_closest_adjacent_tile := closest_tile_direction_to_target != .None
+	if did_find_valid_closest_adjacent_tile {
 		next_tile = adjacent_tiles[closest_tile_direction_to_target]
 		next_dir = closest_tile_direction_to_target
-	} else {
+	}
+	else {
 		raccoon_opposite_direction := opposite_direction(curr_dir)
 		opposite_direction_tile := adjacent_tiles[raccoon_opposite_direction]
 		can_turn_around := tilemap_is_walkable(tm, opposite_direction_tile.x, opposite_direction_tile.y)
 		if can_turn_around {
 			next_tile = adjacent_tiles[raccoon_opposite_direction]
 			next_dir = raccoon_opposite_direction
-		} else {
+		} 
+		else {
 			next_dir = .None
 		}
 	}
