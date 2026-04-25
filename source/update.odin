@@ -11,6 +11,92 @@ import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 
+blinky_pick_direction2 :: proc(tm : ^Tilemap, entity_tmpos : Tilemap_Pos,
+	curr_dir : Direction, target_tile : [2]int) -> Direction {
+	
+	next_dir := curr_dir
+	
+	current_entity_tile := tilemap_pos_absolute_tile(entity_tmpos)
+
+	adjacent_tiles : [Direction][2]int
+	adjacent_tiles[.None] = current_entity_tile
+
+	adjacent_tiles[.Left] = current_entity_tile
+	adjacent_tiles[.Left].x -= 1
+
+	adjacent_tiles[.Right] = current_entity_tile
+	adjacent_tiles[.Right].x += 1
+
+	adjacent_tiles[.Up] = current_entity_tile
+	adjacent_tiles[.Up].y -= 1
+
+	adjacent_tiles[.Down] = current_entity_tile
+	adjacent_tiles[.Down].y += 1
+
+	target_wcenter := tile_center_world(tm, target_tile.x, target_tile.y)
+
+	adjacent_tile_world_centers : [Direction][2]f32
+
+	for adjacent_tile, dir in adjacent_tiles {
+		wcenter := tile_center_world(tm, adjacent_tile.x, adjacent_tile.y)
+		adjacent_tile_world_centers[dir] = wcenter			
+	}
+
+	adjacent_tile_distances_from_target_tile := [Direction]f32{}
+
+	for wcenter, dir in adjacent_tile_world_centers {
+		distance_from_target := linalg.distance(wcenter, target_wcenter)
+		adjacent_tile_distances_from_target_tile[dir] = distance_from_target
+	}
+
+	closest_tile_direction_to_target := Direction.None
+	closest_distance : f32 = 99999
+
+	// avoids checking opposite direction and .none
+	for distance, dir in adjacent_tile_distances_from_target_tile {
+		tile := adjacent_tiles[dir]
+		
+		in_bounds := tilemap_is_coord_in_bounds(tm, tile.x, tile.y)
+		is_opposite_dir := dir == opposite_direction(curr_dir)
+		is_none := dir == .None
+		is_walkable := tilemap_is_walkable(tm, tile.x, tile.y)
+
+		is_valid_dir := in_bounds && 
+			 !is_opposite_dir &&
+			 !is_none &&
+			 is_walkable
+
+		if is_valid_dir {
+			is_closer := distance < closest_distance
+			if is_closer {
+				closest_distance = distance
+				closest_tile_direction_to_target = dir
+			}
+		}
+	}
+
+	next_tile := current_entity_tile
+
+	found_valid_closest_adjacent_tile := closest_tile_direction_to_target != .None
+	if found_valid_closest_adjacent_tile {
+		next_tile = adjacent_tiles[closest_tile_direction_to_target]
+		next_dir = closest_tile_direction_to_target
+	} else {
+		raccoon_opposite_direction := opposite_direction(curr_dir)
+		opposite_direction_tile := adjacent_tiles[raccoon_opposite_direction]
+		can_turn_around := tilemap_is_walkable(tm, opposite_direction_tile.x, opposite_direction_tile.y)
+		if can_turn_around {
+			next_tile = adjacent_tiles[raccoon_opposite_direction]
+			next_dir = raccoon_opposite_direction
+		} else {
+			next_dir = .None
+		}
+	}
+	
+	return next_dir
+}
+
+
 @(export)
 game_update :: proc() {
 	// RECORD THEN IMMEDIATELY PLAYBACK
@@ -467,7 +553,17 @@ blinky_pick_direction :: proc(t: ^Tilemap, from: Tilemap_Pos, target: [2]int, cu
 	return best
 }
 
-update_raccoon :: proc() {
+is_between :: proc(val, bound_a, bound_b : f32) -> bool {
+	lo := min(bound_a, bound_b)
+	hi := max(bound_a, bound_b)
+	ret := false
+	if lo < val && val <= hi {
+		ret = true
+	}
+	return ret
+}
+
+update_raccoon :: proc(dt, speed_mod : f32) {
 	if g.gs.game_over || g.gs.level_complete do return
 
 	if g.gs.raccoon_spawn_delay > 0 {
@@ -492,62 +588,64 @@ update_raccoon :: proc() {
 
 		dv := direction_vector(raccoon.direction)
 		dv_f := [2]f32{f32(dv.x), f32(dv.y)}
-		pre_rel := raccoon.pos.rel_pos
 		move_speed := raccoon_move_speed
 		if g.gs.is_rearranging_chunks {
 			move_speed *= 0.1
 		}
-		raccoon.pos.rel_pos += dv_f * move_speed * rl.GetFrameTime()
+		
+		capped_frame_time := min(rl.GetFrameTime(), 0.016)
+		
+		old_rel_pos := raccoon.pos.rel_pos		
+		test_new_rel_pos := raccoon.pos.rel_pos + 
+			(dv_f * move_speed * capped_frame_time)
+		new_rel_pos := test_new_rel_pos
 
-		crossed_cx := raccoon.pos.rel_pos.x
-		crossed_cy := raccoon.pos.rel_pos.y
-		crossed := false
+		curr_chunk_tile := rel_pos_to_chunk_absolute_tile(old_rel_pos)
+		curr_chunk_tile_center_pos := chunk_tile_to_center_pos(curr_chunk_tile)
 
-		if dv.x != 0 {
-			pre_u  := math.floor(pre_rel.x - 0.5)
-			post_u := math.floor(raccoon.pos.rel_pos.x - 0.5)
-			if pre_u != post_u {
-				crossed = true
-				u_cross := dv.x > 0 ? post_u : pre_u
-				crossed_cx = u_cross + 0.5
-			}
+		did_cross_x := is_between(curr_chunk_tile_center_pos.x, old_rel_pos.x, test_new_rel_pos.x)
+		did_cross_y := is_between(curr_chunk_tile_center_pos.y, old_rel_pos.y, test_new_rel_pos.y)
+
+		should_snap_on_curr_tile_center_x := did_cross_x 
+		should_snap_on_curr_tile_center_y := did_cross_y
+		
+		if should_snap_on_curr_tile_center_x {
+			new_rel_pos.x = curr_chunk_tile_center_pos.x
+		} 
+		else if should_snap_on_curr_tile_center_y {
+			new_rel_pos.y = curr_chunk_tile_center_pos.y
 		}
-		if dv.y != 0 {
-			pre_u  := math.floor(pre_rel.y - 0.5)
-			post_u := math.floor(raccoon.pos.rel_pos.y - 0.5)
-			if pre_u != post_u {
-				crossed = true
-				u_cross := dv.y > 0 ? post_u : pre_u
-				crossed_cy = u_cross + 0.5
-			}
-		}
 
-		if !crossed do continue
-
-		// At the crossed tile center: snap, run Blinky AI, resume.
-		saved_rel   := raccoon.pos.rel_pos
-		saved_chunk := raccoon.pos.chunk
-		raccoon.pos.rel_pos = {crossed_cx, crossed_cy}
+		// COMMIT TO NEW POSITION
+		raccoon.pos.rel_pos = new_rel_pos
 		tilemap_pos_normalize_chunk(&raccoon.pos)
 
-		target := tilemap_pos_absolute_tile(gs.crab)
-		next_dir := blinky_pick_direction(t, raccoon.pos, target, raccoon.direction)
+		should_pick_new_direction := did_cross_x || did_cross_y
+		if should_pick_new_direction {
 
-		if next_dir == .None {
-			// Completely boxed in (walls on all sides including behind). Stop here.
-			raccoon.direction = .None
-			continue
-		}
+			target := tilemap_pos_absolute_tile(gs.crab)
+			next_dir := blinky_pick_direction2(t, raccoon.pos, raccoon.direction, target)
 
-		if next_dir == raccoon.direction {
-			// Straight through — preserve overshoot so movement stays smooth.
-			raccoon.pos.rel_pos = saved_rel
-			raccoon.pos.chunk   = saved_chunk
-		} else {
+			overshoot : f32 = 0
+			if did_cross_x {
+				overshoot = abs(test_new_rel_pos.x - curr_chunk_tile_center_pos.x)
+			} else if did_cross_y {
+				overshoot = abs(test_new_rel_pos.y - curr_chunk_tile_center_pos.y)
+			}
+
+			if next_dir == .Left {
+				raccoon.pos.rel_pos.x -= overshoot
+			} else if next_dir == .Right {
+				raccoon.pos.rel_pos.x += overshoot
+			} else if next_dir == .Up {
+				raccoon.pos.rel_pos.y -= overshoot
+			} else if next_dir == .Down {
+				raccoon.pos.rel_pos.y += overshoot
+			}
+
 			raccoon.direction = next_dir
 		}
 	}
-
 }
 
 update :: proc() {
@@ -648,8 +746,9 @@ update :: proc() {
 
 		}
 
-
-		if IsGamepadButtonPressed(0, .LEFT_TRIGGER_1) {
+		toggle_rearrange := IsGamepadButtonPressed(0, .LEFT_TRIGGER_1) ||
+			IsKeyPressed(.C)
+		if toggle_rearrange {
 			if g.gs.is_rearranging_chunks {
 				g.gs.is_chunk_selection_active = false
 				rl.ResumeMusicStream(g.drone_music)
@@ -829,14 +928,16 @@ update :: proc() {
 	g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
 	g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
 
-	// @(static) paused : bool
-	// if rl.IsKeyPressed(.ENTER) {
-	// 	paused = !paused
-	// }
+	if rl.IsKeyPressed(.ENTER) {
+		g.dev_paused = !g.dev_paused
+	}
 
-	{
+	dt := min(rl.GetFrameTime(), 0.1666666)
+	speed_mod : f32 = g.gs.is_rearranging_chunks ? 0.1 : 1.0
+	
+	if !g.dev_paused {
 		update_crab()
-		update_raccoon()
+		update_raccoon(dt, speed_mod)
 	}
 
 	did_any_raccoons_get_crab := false
