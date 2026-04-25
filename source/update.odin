@@ -850,30 +850,37 @@ update :: proc() {
 
 
 	if g.gs.is_rearranging_chunks {
-		if IsAnyKeysPressed(.UP, .W) || IsGamepadButtonPressed(0, .LEFT_FACE_UP) {
+		move_up := IsAnyKeysPressed(.UP, .W) || IsGamepadButtonPressed(0, .LEFT_FACE_UP)
+		move_down := IsAnyKeysPressed(.DOWN, .S) || IsGamepadButtonPressed(0, .LEFT_FACE_DOWN)
+		move_left := IsAnyKeysPressed(.LEFT, .A) || IsGamepadButtonPressed(0, .LEFT_FACE_LEFT)
+		move_right := IsAnyKeysPressed(.RIGHT, .D) || IsGamepadButtonPressed(0, .LEFT_FACE_RIGHT)
+		
+		if move_up {
 			play_sound_by_name("ui-move-1")
 			g.gs.hovered_chunk.y -= 1
 		}
-		if IsAnyKeysPressed(.DOWN, .S) || IsGamepadButtonPressed(0, .LEFT_FACE_DOWN) {
+		if move_down {
 			play_sound_by_name("ui-move-1")
-
 			g.gs.hovered_chunk.y += 1
 		}
-		if IsAnyKeysPressed(.LEFT, .A) || IsGamepadButtonPressed(0, .LEFT_FACE_LEFT) {
+		if move_left {
 			play_sound_by_name("ui-move-1")
-
 			g.gs.hovered_chunk.x -= 1
 		}
-		if IsAnyKeysPressed(.RIGHT, .D) || IsGamepadButtonPressed(0, .LEFT_FACE_RIGHT) {
+		if move_right {
 			play_sound_by_name("ui-move-1")
-
 			g.gs.hovered_chunk.x += 1
 		}
 
-		swap_chunk := IsAnyKeysPressed(.SPACE, .X) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN)
+		g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
+		g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
 
-		if swap_chunk {
-			if g.gs.is_chunk_selection_active {
+		interact := IsAnyKeysPressed(.SPACE, .X) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN)
+		if interact {
+			should_swap_chunk := g.gs.is_chunk_selection_active
+			should_select_chunk := !should_swap_chunk
+
+			if should_swap_chunk {
 				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
 
 				play_sound_by_name("smack")
@@ -902,7 +909,8 @@ update :: proc() {
 				g.gs.player_pos = tilemap_pos_to_world_pos(tilemap, g.gs.crab)
 
 				g.gs.is_chunk_selection_active = false
-			} else {
+			}
+			else if should_select_chunk{
 				play_sound_by_name("put-chunk")
 				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
 				g.gs.is_chunk_selection_active = true
@@ -913,13 +921,7 @@ update :: proc() {
 	}
 
 
-	// NOTE(john) make sure selection stays within the bounds
-	// of the overall chunk arrangemetn
-	//
-	// Also if there are empty tilemaps with 0 dimensions
-	// this will crash
-	g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
-	g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
+	
 
 	if rl.IsKeyPressed(.ENTER) {
 		g.dev_paused = !g.dev_paused
@@ -960,11 +962,6 @@ update :: proc() {
 	}
 	g.gs.prev_walking_gameplay = walking_gameplay
 
-	// if !g.gs.game_over && !g.gs.level_complete &&
-	//    g.gs.raccoon_active &&
-	//    tilemap_pos_absolute_tile(g.gs.crab) == tilemap_pos_absolute_tile(g.gs.raccoon) {
-
-	// }
 
 	if !g.gs.game_over && !g.gs.level_complete { // crab reached the flag
 		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
@@ -1129,9 +1126,6 @@ update :: proc() {
 				is_selected := g.gs.is_chunk_selection_active && chunk_id == g.gs.selected_chunk
 				is_hovered  := chunk_id == g.gs.hovered_chunk
 
-				// Selected wins over hovered so the white border shows
-				// immediately on the SPACE-press frame, before the player
-				// moves the cursor off the selected chunk.
 				if is_selected {
 					color = rl.WHITE
 					color.a = 255
@@ -1177,8 +1171,6 @@ update :: proc() {
 	{ // instructions and ui guide stuff in camera
 		if g.gs.current_level_index < 2 {
 			rl.DrawTextureEx(g.dpad_crab_walk_texture, [2]f32{-310, -90}, {}, 0.6, rl.WHITE)
-
-			// rl.DrawTextureV(g.move_crab_sticker_texture, [2]f32{-600, -100}, rl.WHITE)
 		}
 	}
 
