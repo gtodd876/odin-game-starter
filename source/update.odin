@@ -285,37 +285,7 @@ swap_to_level :: proc(i: int) {
 	g.gs.num_keys_crab_has = 0
 }
 
-// spawn_raccoon_opposite_crab :: proc() {
-// 	t := &g.gs.level.tilemap
-// 	crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
-// 	target_x := t.width  - 1 - crab_tile.x
-// 	target_y := t.height - 1 - crab_tile.y
 
-// 	// Spiral outward from the opposite corner until we land on a walkable tile.
-// 	// Guaranteed to terminate because the crab's own tile is walkable.
-// 	max_radius := t.width + t.height
-// 	found_x, found_y := target_x, target_y
-// 	search: for radius in 0..=max_radius {
-// 		for dy in -radius..=radius {
-// 			for dx in -radius..=radius {
-// 				if abs(dx) != radius && abs(dy) != radius do continue
-// 				tx := target_x + dx
-// 				ty := target_y + dy
-// 				if tx < 0 || tx >= t.width || ty < 0 || ty >= t.height do continue
-// 				if tx == crab_tile.x && ty == crab_tile.y do continue
-// 				if tilemap_is_walkable(t, tx, ty) {
-// 					found_x = tx
-// 					found_y = ty
-// 					break search
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	g.gs.raccoon = absolute_tile_to_tilemap_pos(found_x, found_y)
-// 	g.gs.raccoon_direction = .None
-// 	raccoon_move_speed = 3.0
-// }
 
 raccoon_move_speed : f32 = 3.0
 
