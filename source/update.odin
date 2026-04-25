@@ -372,7 +372,7 @@ try_open_adjacent_lock :: proc(t: ^Tilemap, cp: Tilemap_Pos, dir: Direction) -> 
 	return true
 }
 
-update_crab :: proc() {
+update_crab :: proc(dt, speed_mod : f32) {
 	if g.gs.game_over || g.gs.level_complete do return
 	gs := &g.gs
 	t  := &gs.level.tilemap
@@ -424,11 +424,9 @@ update_crab :: proc() {
 	dv := direction_vector(gs.current_direction)
 	dv_f := [2]f32{f32(dv.x), f32(dv.y)}
 	pre_rel := gs.crab.rel_pos
-	move_speed := gs.move_speed
-	if g.gs.is_rearranging_chunks {
-		move_speed *= 0.1
-	}
-	gs.crab.rel_pos += dv_f * move_speed * rl.GetFrameTime()
+	move_speed := gs.move_speed * speed_mod
+
+	gs.crab.rel_pos += dv_f * move_speed * dt
 
 	// 5. Detect tile-center crossing. Tile centers sit at half-integers;
 	// shift by -0.5 so they sit at integers, and a crossing is a change in
@@ -588,16 +586,11 @@ update_raccoon :: proc(dt, speed_mod : f32) {
 
 		dv := direction_vector(raccoon.direction)
 		dv_f := [2]f32{f32(dv.x), f32(dv.y)}
-		move_speed := raccoon_move_speed
-		if g.gs.is_rearranging_chunks {
-			move_speed *= 0.1
-		}
-		
-		capped_frame_time := min(rl.GetFrameTime(), 0.016)
-		
+		move_speed := raccoon_move_speed * speed_mod
+				
 		old_rel_pos := raccoon.pos.rel_pos		
 		test_new_rel_pos := raccoon.pos.rel_pos + 
-			(dv_f * move_speed * capped_frame_time)
+			(dv_f * move_speed * dt)
 		new_rel_pos := test_new_rel_pos
 
 		curr_chunk_tile := rel_pos_to_chunk_absolute_tile(old_rel_pos)
@@ -932,11 +925,14 @@ update :: proc() {
 		g.dev_paused = !g.dev_paused
 	}
 
+	// NOTE(john) This prevents getting way to fast when 
+	// stepping in debugger
+
 	dt := min(rl.GetFrameTime(), 0.1666666)
 	speed_mod : f32 = g.gs.is_rearranging_chunks ? 0.1 : 1.0
-	
+
 	if !g.dev_paused {
-		update_crab()
+		update_crab(dt, speed_mod)
 		update_raccoon(dt, speed_mod)
 	}
 
