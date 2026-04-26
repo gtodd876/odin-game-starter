@@ -86,7 +86,6 @@ selector_move_duration : f32 = 0.2
 // Doesn't contain any "meta" state like
 // inputs and debug state
 Game_State :: struct {
-	player_pos: rl.Vector2,      // derived each frame from crab pos; kept here for rendering/debug
 	hovered_chunk : [2]int,
 	is_chunk_selection_active : bool,
 	selector_move_timer : f32,
@@ -136,11 +135,18 @@ Raccoon :: struct {
 	direction : Direction,
 }
 
+Dev_Console :: struct {
+	show : bool,
+	buffer : [dynamic; 512]u8,
+}
+
 Game_Memory :: struct {
 	dev_paused : bool,
+	dev_console : Dev_Console,
+
 	sfx_bank : map[string]rl.Sound,
 	drone_music     : rl.Music,
-	clickies_music  : rl.Music,
+	clickies_music  : rl.Music,	
 	dingdings_music : rl.Music,
 	render_texture : rl.RenderTexture2D,
 	old_input_state : All_Input_State,
@@ -207,8 +213,9 @@ draw_debug_overlay :: proc() {
 	px := panel.x
 	py := panel.y + 28
 
-	rl.DrawText(fmt.ctprintf("%d fps", rl.GetFPS()),                                   i32(px)+8, i32(py),    10, rl.BLACK)
-	rl.DrawText(fmt.ctprintf("pos %.1f, %.1f", g.gs.player_pos.x, g.gs.player_pos.y), i32(px)+8, i32(py)+16, 10, rl.BLACK)
+	rl.DrawText(fmt.ctprintf("%d fps", rl.GetFPS()), i32(px)+8, i32(py), 10, rl.BLACK)
+	crab_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
+	rl.DrawText(fmt.ctprintf("pos %.1f, %.1f", crab_wpos.x, crab_wpos.y), i32(px)+8, i32(py)+16, 10, rl.BLACK)
 	if g.debug.paused {
 		rl.DrawText("PAUSED", i32(px)+200, i32(py), 10, rl.MAROON)
 	}
@@ -221,9 +228,7 @@ draw_debug_overlay :: proc() {
 		0, 400,
 	)
 
-	if rl.GuiButton({px+8, py+60, 120, 20}, "reset pos") {
-		g.gs.player_pos = {}
-	}
+	
 	rl.GuiCheckBox({px+136, py+62, 16, 16}, "draw debug", &g.debug.debug_draw)
 
 	// Save / load — dev tooling, native only (needs filesystem). Save is disabled
@@ -256,7 +261,7 @@ draw_debug_overlay :: proc() {
 	for i in 0..<10 {
 		bx := px + 8 + f32(i) * 25
 		if rl.GuiButton({bx, py+216, 23, 23}, fmt.ctprintf("%d", i)) {
-			swap_to_level(i)
+			change_level_and_initialize(i)
 		}
 	}
 }
@@ -354,7 +359,6 @@ game_init :: proc() {
 					f32(tx %% chunk_width)  + 0.5,
 					f32(ty %% chunk_height) + 0.5,
 				}
-				g.gs.player_pos = tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
 				break spawn
 			}
 		}
@@ -397,7 +401,7 @@ game_init :: proc() {
 	g.initial_current_level = g.levels[g.gs.current_level_index]
 	g.gs.level = g.levels[g.gs.current_level_index]
 
-	swap_to_level(0)
+	change_level_and_initialize(0)
 
 	// g.levels[2].tilemap = init_tilemap_by_specifying_chunks(2, 1)
 	// tmp := g.levels[9]

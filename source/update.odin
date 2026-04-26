@@ -1,5 +1,6 @@
 package game
 
+import "core:strconv"
 // NOTE(johnb) only reason putting in here is i found i often
 // want to just see update stuff in one pane,
 // and anything else in the other pane at the same time
@@ -10,6 +11,7 @@ import "base:runtime"
 import "core:fmt"
 import "core:math"
 import "core:math/linalg"
+import "core:strings"
 
 blinky_pick_direction2 :: proc(tm : ^Tilemap, entity_tmpos : Tilemap_Pos,
 	curr_dir : Direction, target_tile : [2]int) -> Direction {
@@ -107,8 +109,17 @@ blinky_pick_direction2 :: proc(tm : ^Tilemap, entity_tmpos : Tilemap_Pos,
 @(export)
 game_update :: proc() {
 	// RECORD THEN IMMEDIATELY PLAYBACK
-	if rl.IsKeyPressed(.L) {
-		cycle_record_playback()
+	if !g.dev_console.show {
+		if rl.IsKeyPressed(.L) {
+			cycle_record_playback()
+		}
+		rl.SetMusicVolume(g.drone_music, 0.15)
+		rl.UpdateMusicStream(g.drone_music)
+		rl.UpdateMusicStream(g.clickies_music)
+		rl.UpdateMusicStream(g.dingdings_music)
+
+	} else {
+			
 	}
 
 	update_all_input_state()
@@ -121,11 +132,7 @@ game_update :: proc() {
 
 	g.old_input_state = g.input_state
 
-	rl.SetMusicVolume(g.drone_music, 0.15)
-	rl.UpdateMusicStream(g.drone_music)
-	rl.UpdateMusicStream(g.clickies_music)
-	rl.UpdateMusicStream(g.dingdings_music)
-
+	
 	// if rl.IsKeyPressed(.F12) {
 	// 	intrinsics.debug_trap()
 	// }
@@ -214,6 +221,19 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 	return true
 }
 
+swap_levels :: proc(a, b : int) {
+	level_nums_in_bounds := a >= 0 && a < num_levels &&
+		b >= 0 && b < num_levels
+	
+	same := a == b
+
+	if level_nums_in_bounds && !same {
+		tmp := g.levels[a]
+		g.levels[a] = g.levels[b]
+		g.levels[b] = tmp
+	}
+}
+
 // Centered modal popup using the HUD's rounded-rect style.
 // Caller passes screen-center-aligned text lines; pass "" for any middle line to collapse it out.
 draw_popup :: proc(heading, middle, footer: cstring, middle2: cstring = "") {
@@ -269,7 +289,7 @@ draw_popup :: proc(heading, middle, footer: cstring, middle2: cstring = "") {
 	rl.DrawTextEx(g.lcd_font, footer, {center_x - f_dim.x * 0.5, y}, footer_size, spacing, PALETTE_4)
 }
 
-swap_to_level :: proc(i: int) {
+change_level_and_initialize :: proc(i: int) {
 	g.gs.current_level_index = i
 	g.initial_current_level = g.levels[i]
 	g.gs.level = g.initial_current_level
@@ -357,7 +377,6 @@ update_crab :: proc(dt, speed_mod : f32) {
 	// Refresh derived state on the way out: wrap rel_pos/chunk, then world pos.
 	defer {
 		tilemap_pos_normalize_chunk(&gs.crab)
-		gs.player_pos = tilemap_pos_to_world_pos(t, gs.crab)
 		if gs.move_state == .Moving {
 			gs.crab_anim_time += rl.GetFrameTime()
 			if gs.current_direction != .None {
@@ -618,11 +637,293 @@ update_raccoon :: proc(dt, speed_mod : f32) {
 	}
 }
 
-update :: proc() {
+gameplay_update :: proc() {
+	tilemap := &g.gs.level.tilemap
 
-	// NOTE(john): these are ints in here only because its easy to write in code
-	// These are planned to be enum values once
-	//... if we have an actual editor where we are placing these things
+	if g.gs.is_rearranging_chunks {
+		move_up := IsAnyKeysPressed(.UP, .W) || IsGamepadButtonPressed(0, .LEFT_FACE_UP)
+		move_down := IsAnyKeysPressed(.DOWN, .S) || IsGamepadButtonPressed(0, .LEFT_FACE_DOWN)
+		move_left := IsAnyKeysPressed(.LEFT, .A) || IsGamepadButtonPressed(0, .LEFT_FACE_LEFT)
+		move_right := IsAnyKeysPressed(.RIGHT, .D) || IsGamepadButtonPressed(0, .LEFT_FACE_RIGHT)
+		
+		if move_up {
+			play_sound_by_name("ui-move-1")
+			g.gs.hovered_chunk.y -= 1
+		}
+		if move_down {
+			play_sound_by_name("ui-move-1")
+			g.gs.hovered_chunk.y += 1
+		}
+		if move_left {
+			play_sound_by_name("ui-move-1")
+			g.gs.hovered_chunk.x -= 1
+		}
+		if move_right {
+			play_sound_by_name("ui-move-1")
+			g.gs.hovered_chunk.x += 1
+		}
+
+		g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
+		g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
+
+		interact := IsAnyKeysPressed(.SPACE, .X) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN)
+		if interact {
+			should_swap_chunk := g.gs.is_chunk_selection_active
+			should_select_chunk := !should_swap_chunk
+
+			if should_swap_chunk {
+				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
+
+				play_sound_by_name("smack")
+				hovered_tiles := tilemap_get_chunk_tiles(tilemap,
+					g.gs.hovered_chunk.x, g.gs.hovered_chunk.y)
+				selected_tiles := tilemap_get_chunk_tiles(tilemap,
+					g.gs.selected_chunk.x, g.gs.selected_chunk.y)
+
+				set_chunk_tiles_in_tilemap(tilemap, g.gs.hovered_chunk.x, g.gs.hovered_chunk.y, selected_tiles[:])
+				set_chunk_tiles_in_tilemap(tilemap, g.gs.selected_chunk.x, g.gs.selected_chunk.y, hovered_tiles[:])
+
+				// Crab rides along with whichever chunk was swapped out from under it.
+				if g.gs.crab.chunk == g.gs.hovered_chunk {
+					g.gs.crab.chunk = g.gs.selected_chunk
+				} else if g.gs.crab.chunk == g.gs.selected_chunk {
+					g.gs.crab.chunk = g.gs.hovered_chunk
+				}
+				// so do raccoons
+				for &raccoon in g.gs.raccoon_pool {
+					if raccoon.pos.chunk == g.gs.hovered_chunk {
+						raccoon.pos.chunk = g.gs.selected_chunk
+					} else if raccoon.pos.chunk == g.gs.selected_chunk {
+						raccoon.pos.chunk = g.gs.hovered_chunk
+					}
+				}
+
+				g.gs.is_chunk_selection_active = false
+			}
+			else if should_select_chunk{
+				play_sound_by_name("put-chunk")
+				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
+				g.gs.is_chunk_selection_active = true
+				g.gs.selected_chunk = g.gs.hovered_chunk
+			}
+		}
+
+	}
+
+
+	
+
+	if rl.IsKeyPressed(.ENTER) {
+		g.dev_paused = !g.dev_paused
+	}
+
+	// NOTE(john) This prevents getting way to fast when 
+	// stepping in debugger
+
+	dt := min(rl.GetFrameTime(), 0.1666666)
+	speed_mod : f32 = g.gs.is_rearranging_chunks ? 0.1 : 1.0
+
+	// tilemap_pos_normalize_chunk(&g.gs.crab)
+
+	if !g.dev_paused {
+		update_crab(dt, speed_mod)
+		update_raccoon(dt, speed_mod)
+	}
+
+	// tilemap_pos_normalize_chunk(&g.gs.crab)
+
+
+	did_any_raccoons_get_crab := false
+	for raccoon in g.gs.raccoon_pool {
+		if raccoon.active {
+			did_any_raccoons_get_crab |=  tilemap_pos_absolute_tile(g.gs.crab) == tilemap_pos_absolute_tile(raccoon.pos)
+		}
+	}
+
+	if !g.gs.game_over && !g.gs.level_complete && did_any_raccoons_get_crab {
+		// TODO: swap to a dedicated raccoon-hit sfx once the asset lands.
+		play_sound_by_name("smack")
+		play_sound_by_name("cluster")
+		rl.PauseMusicStream(g.drone_music)
+		g.gs.game_over  = true
+		g.gs.move_state = .Idle
+	}
+
+	walking_gameplay := g.gs.move_state == .Moving && !g.gs.is_rearranging_chunks
+	if walking_gameplay && !g.gs.prev_walking_gameplay {
+		rl.ResumeMusicStream(g.clickies_music)
+	} else if !walking_gameplay && g.gs.prev_walking_gameplay {
+		rl.PauseMusicStream(g.clickies_music)
+	}
+	g.gs.prev_walking_gameplay = walking_gameplay
+
+
+	if !g.gs.game_over && !g.gs.level_complete { // crab reached the flag
+		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
+		if tilemap_get_tile_val(&g.gs.level.tilemap, crab_tile.x, crab_tile.y) == .Flag {
+			rl.PauseMusicStream(g.drone_music)
+			if g.gs.current_level_index == num_levels - 1 {
+				// Final level — credits popup runs dingdings instead of the win sting.
+				rl.ResumeMusicStream(g.dingdings_music)
+			} else {
+				play_sound_by_name("win")
+			}
+			g.gs.level_complete = true
+			g.gs.move_state     = .Idle
+		}
+	}
+
+	{ // crab get key
+		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
+		tile_type_that_crab_on := tilemap_get_tile_val(&g.gs.level.tilemap,
+			crab_tile.x, crab_tile.y)
+		crab_on_a_key := tile_type_that_crab_on == .Key
+		if crab_on_a_key {
+			tilemap_set_tile(&g.gs.level.tilemap, crab_tile.x, crab_tile.y, .Trail)
+			g.gs.num_keys_crab_has+=1
+			play_sound_by_name("chime")
+		}
+	}
+}
+
+
+update_dev_console :: proc(screen_width, screen_height : f32) {
+	if g.dev_console.show {
+		text_field_rec := rl.Rectangle {0, screen_height - 30, screen_width, 30}
+		black_a := rl.Color{0,0,0,200}
+		rl.DrawRectangleRec(text_field_rec, black_a)
+		
+		Key_Char :: struct {
+			key : rl.KeyboardKey,
+			char : u8,
+		}
+
+		key_to_char := [?]Key_Char {
+		    {.A, 'a'},
+		    {.B, 'b'},
+		    {.C, 'c'},
+		    {.D, 'd'},
+		    {.E, 'e'},
+		    {.F, 'f'},
+		    {.G, 'g'},
+		    {.H, 'h'},
+		    {.I, 'i'},
+		    {.J, 'j'},
+		    {.K, 'k'},
+		    {.L, 'l'},
+		    {.M, 'm'},
+		    {.N, 'n'},
+		    {.O, 'o'},
+		    {.P, 'p'},
+		    {.Q, 'q'},
+		    {.R, 'r'},
+		    {.S, 's'},
+		    {.T, 't'},
+		    {.U, 'u'},
+		    {.V, 'v'},
+		    {.W, 'w'},
+		    {.X, 'x'},
+		    {.Y, 'y'},
+		    {.Z, 'z'},
+		    {.ZERO,  '0'},
+		    {.ONE,   '1'},
+		    {.TWO,   '2'},
+		    {.THREE, '3'},
+		    {.FOUR,  '4'},
+		    {.FIVE,  '5'},
+		    {.SIX,   '6'},
+		    {.SEVEN, '7'},
+		    {.EIGHT, '8'},
+		    {.NINE,  '9'},
+		    {.SPACE, ' '},
+		}
+
+		get_char :: proc(key_to_char : []Key_Char, key : rl.KeyboardKey) -> (c : u8) {
+			c = 0
+			for kc in key_to_char {
+				if kc.key == key {
+					c = kc.char
+				}
+			}
+			return c
+		} 
+
+		for key in rl.KeyboardKey {
+			pressed := ( rl.IsKeyPressedRepeat(key) || rl.IsKeyPressed(key) ) &&
+				!rl.IsKeyDown(.LEFT_CONTROL) 
+			if pressed {
+				c := get_char(key_to_char[:], key)
+				if c != 0 {
+					append(&g.dev_console.buffer, c)
+				}
+				backspace_pressed := key == rl.KeyboardKey.BACKSPACE
+				can_backspace := len(g.dev_console.buffer) > 0
+				if can_backspace && backspace_pressed {
+					g.dev_console.buffer[len(g.dev_console.buffer) - 1] = 0
+					pop(&g.dev_console.buffer)
+				}
+			}	
+		}
+
+		buffer_cstring : cstring = ""
+		if len(g.dev_console.buffer) > 0 {
+			buffer_cstring = cstring(&g.dev_console.buffer[0])
+		}
+
+
+		rl.DrawText(buffer_cstring, i32(text_field_rec.x), i32(text_field_rec.y), 24, rl.WHITE)
+
+		submit_command := rl.IsKeyPressed(.ENTER)
+		if submit_command {
+			raw_string_text_input := strings.clone_from_bytes(g.dev_console.buffer[:], context.temp_allocator)
+			parts : [dynamic; 100]string
+			// TODO(john) this currently dont work if there are multiple spaces
+			// between command line words
+			
+			for s in strings.split_by_byte_iterator(&raw_string_text_input, ' ') {
+				part := strings.trim_space(s)
+				append(&parts, part)
+			}
+			if len(parts) > 0 {
+				cmd := parts[0]
+				if cmd == "level" {
+					if len(parts) > 1 {
+						sub_cmd := parts[1]
+						if sub_cmd == "swap" {
+							if len(parts) > 2 {
+								arg := parts[2]
+								num, ok := strconv.parse_int(arg, 10)
+								if ok {
+									swap_levels(num, g.gs.current_level_index)
+									change_level_and_initialize(g.gs.current_level_index)
+								}
+							}
+						}
+						else if sub_cmd == "goto" {
+							if len(parts) > 2 {
+								arg := parts[2]
+								num, ok := strconv.parse_int(arg, 10)
+								if ok {
+									change_level_and_initialize(num)
+								}
+							}
+						}
+					}
+				}
+			}
+			g.dev_console.buffer = {}
+			clear(&g.dev_console.buffer)
+		}
+	}
+
+	toggle_dev_console := rl.IsKeyDown(.LEFT_CONTROL) && rl.IsKeyPressed(.T)
+	if toggle_dev_console {
+		g.dev_console.show = !g.dev_console.show
+	}
+	
+}
+
+update :: proc() {
 
 	tilemap := &g.gs.level.tilemap
 
@@ -642,34 +943,7 @@ update :: proc() {
 
 	// if rl.IsKeyPressed(.F10) do t_save_data()
 
-	{ // swap levels
-		level_keys := [?] rl.KeyboardKey {
-			rl.KeyboardKey.ZERO,
-			rl.KeyboardKey.ONE,
-			rl.KeyboardKey.TWO,
-			rl.KeyboardKey.THREE,
-			rl.KeyboardKey.FOUR,
-			rl.KeyboardKey.FIVE,
-			rl.KeyboardKey.SIX,
-			rl.KeyboardKey.SEVEN,
-			rl.KeyboardKey.EIGHT,
-			rl.KeyboardKey.NINE,
-		}
-
-		// Keep the active slot in sync while editing so swapping out doesn't lose work.
-		// g.levels[g.gs.current_level_index] = g.gs.level
-
-		for level_key, i in level_keys {
-			if rl.IsKeyPressed(level_key) do swap_to_level(i)
-		}
-	}
-
-	{ // cycle thru selected tile type
-		tile_type_switch_key := rl.KeyboardKey.M
-		if rl.IsKeyPressed(tile_type_switch_key) {
-			g.editor_selected_tile_type = Tile_Type((int(g.editor_selected_tile_type)+1)%%len(Tile_Type))
-		}
-	}
+	
 
 	when ODIN_OS != .JS {
 		if rl.IsKeyPressed(.F11) {
@@ -824,147 +1098,35 @@ update :: proc() {
 
 	}
 
+	if !g.dev_console.show {
+		gameplay_update()
+		{ // swap levels
+			level_keys := [?] rl.KeyboardKey {
+				rl.KeyboardKey.ZERO,
+				rl.KeyboardKey.ONE,
+				rl.KeyboardKey.TWO,
+				rl.KeyboardKey.THREE,
+				rl.KeyboardKey.FOUR,
+				rl.KeyboardKey.FIVE,
+				rl.KeyboardKey.SIX,
+				rl.KeyboardKey.SEVEN,
+				rl.KeyboardKey.EIGHT,
+				rl.KeyboardKey.NINE,
+			}
 
+			for level_key, i in level_keys {
+				if rl.IsKeyPressed(level_key) do change_level_and_initialize(i)
+			}
+		}
 
-	if g.gs.is_rearranging_chunks {
-		move_up := IsAnyKeysPressed(.UP, .W) || IsGamepadButtonPressed(0, .LEFT_FACE_UP)
-		move_down := IsAnyKeysPressed(.DOWN, .S) || IsGamepadButtonPressed(0, .LEFT_FACE_DOWN)
-		move_left := IsAnyKeysPressed(.LEFT, .A) || IsGamepadButtonPressed(0, .LEFT_FACE_LEFT)
-		move_right := IsAnyKeysPressed(.RIGHT, .D) || IsGamepadButtonPressed(0, .LEFT_FACE_RIGHT)
+		{ // cycle thru selected tile type
+			tile_type_switch_key := rl.KeyboardKey.M
+			if rl.IsKeyPressed(tile_type_switch_key) {
+				g.editor_selected_tile_type = Tile_Type((int(g.editor_selected_tile_type)+1)%%len(Tile_Type))
+			}
+		}
+	}  else {
 		
-		if move_up {
-			play_sound_by_name("ui-move-1")
-			g.gs.hovered_chunk.y -= 1
-		}
-		if move_down {
-			play_sound_by_name("ui-move-1")
-			g.gs.hovered_chunk.y += 1
-		}
-		if move_left {
-			play_sound_by_name("ui-move-1")
-			g.gs.hovered_chunk.x -= 1
-		}
-		if move_right {
-			play_sound_by_name("ui-move-1")
-			g.gs.hovered_chunk.x += 1
-		}
-
-		g.gs.hovered_chunk.x %%= tilemap.num_chunks_x
-		g.gs.hovered_chunk.y %%= tilemap.num_chunks_y
-
-		interact := IsAnyKeysPressed(.SPACE, .X) || IsGamepadButtonPressed(0, .RIGHT_FACE_DOWN)
-		if interact {
-			should_swap_chunk := g.gs.is_chunk_selection_active
-			should_select_chunk := !should_swap_chunk
-
-			if should_swap_chunk {
-				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
-
-				play_sound_by_name("smack")
-				hovered_tiles := tilemap_get_chunk_tiles(tilemap,
-					g.gs.hovered_chunk.x, g.gs.hovered_chunk.y)
-				selected_tiles := tilemap_get_chunk_tiles(tilemap,
-					g.gs.selected_chunk.x, g.gs.selected_chunk.y)
-
-				set_chunk_tiles_in_tilemap(tilemap, g.gs.hovered_chunk.x, g.gs.hovered_chunk.y, selected_tiles[:])
-				set_chunk_tiles_in_tilemap(tilemap, g.gs.selected_chunk.x, g.gs.selected_chunk.y, hovered_tiles[:])
-
-				// Crab rides along with whichever chunk was swapped out from under it.
-				if g.gs.crab.chunk == g.gs.hovered_chunk {
-					g.gs.crab.chunk = g.gs.selected_chunk
-				} else if g.gs.crab.chunk == g.gs.selected_chunk {
-					g.gs.crab.chunk = g.gs.hovered_chunk
-				}
-				// so do raccoons
-				for &raccoon in g.gs.raccoon_pool {
-					if raccoon.pos.chunk == g.gs.hovered_chunk {
-						raccoon.pos.chunk = g.gs.selected_chunk
-					} else if raccoon.pos.chunk == g.gs.selected_chunk {
-						raccoon.pos.chunk = g.gs.hovered_chunk
-					}
-				}
-				g.gs.player_pos = tilemap_pos_to_world_pos(tilemap, g.gs.crab)
-
-				g.gs.is_chunk_selection_active = false
-			}
-			else if should_select_chunk{
-				play_sound_by_name("put-chunk")
-				g.gs.swap_selection_change_timer = zoom_timer_duration_sec
-				g.gs.is_chunk_selection_active = true
-				g.gs.selected_chunk = g.gs.hovered_chunk
-			}
-		}
-
-	}
-
-
-	
-
-	if rl.IsKeyPressed(.ENTER) {
-		g.dev_paused = !g.dev_paused
-	}
-
-	// NOTE(john) This prevents getting way to fast when 
-	// stepping in debugger
-
-	dt := min(rl.GetFrameTime(), 0.1666666)
-	speed_mod : f32 = g.gs.is_rearranging_chunks ? 0.1 : 1.0
-
-	if !g.dev_paused {
-		update_crab(dt, speed_mod)
-		update_raccoon(dt, speed_mod)
-	}
-
-	did_any_raccoons_get_crab := false
-	for raccoon in g.gs.raccoon_pool {
-		if raccoon.active {
-			did_any_raccoons_get_crab |=  tilemap_pos_absolute_tile(g.gs.crab) == tilemap_pos_absolute_tile(raccoon.pos)
-		}
-	}
-
-	if !g.gs.game_over && !g.gs.level_complete && did_any_raccoons_get_crab {
-		// TODO: swap to a dedicated raccoon-hit sfx once the asset lands.
-		play_sound_by_name("smack")
-		play_sound_by_name("cluster")
-		rl.PauseMusicStream(g.drone_music)
-		g.gs.game_over  = true
-		g.gs.move_state = .Idle
-	}
-
-	walking_gameplay := g.gs.move_state == .Moving && !g.gs.is_rearranging_chunks
-	if walking_gameplay && !g.gs.prev_walking_gameplay {
-		rl.ResumeMusicStream(g.clickies_music)
-	} else if !walking_gameplay && g.gs.prev_walking_gameplay {
-		rl.PauseMusicStream(g.clickies_music)
-	}
-	g.gs.prev_walking_gameplay = walking_gameplay
-
-
-	if !g.gs.game_over && !g.gs.level_complete { // crab reached the flag
-		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
-		if tilemap_get_tile_val(&g.gs.level.tilemap, crab_tile.x, crab_tile.y) == .Flag {
-			rl.PauseMusicStream(g.drone_music)
-			if g.gs.current_level_index == num_levels - 1 {
-				// Final level — credits popup runs dingdings instead of the win sting.
-				rl.ResumeMusicStream(g.dingdings_music)
-			} else {
-				play_sound_by_name("win")
-			}
-			g.gs.level_complete = true
-			g.gs.move_state     = .Idle
-		}
-	}
-
-	{ // crab get key
-		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
-		tile_type_that_crab_on := tilemap_get_tile_val(&g.gs.level.tilemap,
-			crab_tile.x, crab_tile.y)
-		crab_on_a_key := tile_type_that_crab_on == .Key
-		if crab_on_a_key {
-			tilemap_set_tile(&g.gs.level.tilemap, crab_tile.x, crab_tile.y, .Trail)
-			g.gs.num_keys_crab_has+=1
-			play_sound_by_name("chime")
-		}
 	}
 
 	rl.BeginTextureMode(g.render_texture)
@@ -1129,7 +1291,8 @@ update :: proc() {
 		case .Left:      rotation = 270
 		}
 		src := rl.Rectangle{0, 0, f32(tex.width), f32(tex.height)}
-		dst := rl.Rectangle{g.gs.player_pos.x, g.gs.player_pos.y, tile_size_f, tile_size_f}
+		player_pos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
+		dst := rl.Rectangle{player_pos.x, player_pos.y, tile_size_f, tile_size_f}
 		origin := [2]f32{tile_size_f * 0.5, tile_size_f * 0.5}
 		rl.DrawTexturePro(tex, src, dst, origin, rotation, rl.WHITE)
 
@@ -1168,7 +1331,8 @@ update :: proc() {
 
 
 	if g.debug.debug_draw {
-		rl.DrawRectangleLinesEx({g.gs.player_pos.x - 8, g.gs.player_pos.y - 8, 16, 16}, 1, rl.MAGENTA)
+		crab_wpos := tilemap_pos_to_world_pos(&g.gs.level.tilemap, g.gs.crab)
+		rl.DrawRectangleLinesEx({crab_wpos.x - 8, crab_wpos.y - 8, 16, 16}, 1, rl.MAGENTA)
 		rl.DrawLineV({-5, 0}, {5, 0}, rl.YELLOW)
 		rl.DrawLineV({0, -5}, {0, 5}, rl.YELLOW)
 	}
@@ -1424,7 +1588,7 @@ update :: proc() {
 				// Last-level completion loops back to level 0 for the "You Win" restart.
 				next_i = g.gs.current_level_index == num_levels - 1 ? 0 : g.gs.current_level_index + 1
 			}
-			swap_to_level(next_i)
+			change_level_and_initialize(next_i)
 			g.gs.num_keys_crab_has = 0
 			g.gs.elapsed_time      = 0
 			g.gs.move_state        = .Idle
@@ -1470,5 +1634,6 @@ update :: proc() {
 
 		draw_debug_overlay()
 
+		update_dev_console(screen_width, screen_height)
 	}
 }
