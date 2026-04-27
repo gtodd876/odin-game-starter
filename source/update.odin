@@ -182,22 +182,22 @@ draw_web_audio_unlock_screen :: proc() {
 
 data_file_filename :: "data"
 
-// t_save_data :: proc() {
+t_save_data :: proc() {
 
-// 	g.gs.level.crab_start_pos = g.gs.crab
-// 	g.gs.level.raccoon_start_pool = g.gs.raccoon_pool
+	g.gs.level.crab_start_pos = g.gs.crab
+	g.gs.level.raccoon_start_pool = g.gs.raccoon_pool
 
-// 	g.levels[g.gs.current_level_index] = g.gs.level
-// 	g.initial_current_level = g.gs.level
+	g.level_pack.levels[g.gs.current_level_index] = g.gs.level
+	g.initial_current_level = g.gs.level
 
-// 	s : Serializer
-// 	serializer_init_writer(&s, allocator = context.temp_allocator)
-// 	serialize(&s, &g.levels)
-// 	werr := os.write_entire_file(data_file_filename, s.data[:])
-// 	if werr != nil {
-// 		fmt.printfln("error writing file to data file")
-// 	}
-// }
+	s : Serializer
+	serializer_init_writer(&s, allocator = context.temp_allocator)
+	serialize(&s, &g.level_pack)
+	ok := write_entire_file(data_file_filename, s.data[:])
+	if !ok {
+		fmt.printfln("error writing file to data file")
+	}
+}
 
 t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 
@@ -205,7 +205,7 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 	data, success := read_entire_file_from_path(data_file_filename, allocator)
 	if success {
 		serializer_init_reader(&s, data[:])
-		ok := serialize(&s, &g.levels)
+		ok := serialize(&s, &g.level_pack)
 		if !ok  {
 			fmt.printfln("error serializing reader")
 			return false
@@ -222,15 +222,15 @@ t_load_data :: proc(allocator : runtime.Allocator = context.allocator) -> bool {
 }
 
 swap_levels :: proc(a, b : int) {
-	level_nums_in_bounds := a >= 0 && a < num_levels &&
-		b >= 0 && b < num_levels
+	level_nums_in_bounds := a >= 0 && a < len(g.level_pack.levels) &&
+		b >= 0 && b < len(g.level_pack.levels)
 	
 	same := a == b
 
 	if level_nums_in_bounds && !same {
-		tmp := g.levels[a]
-		g.levels[a] = g.levels[b]
-		g.levels[b] = tmp
+		tmp := g.level_pack.levels[a]
+		g.level_pack.levels[a] = g.level_pack.levels[b]
+		g.level_pack.levels[b] = tmp
 	}
 }
 
@@ -291,7 +291,7 @@ draw_popup :: proc(heading, middle, footer: cstring, middle2: cstring = "") {
 
 change_level_and_initialize :: proc(i: int) {
 	g.gs.current_level_index = i
-	g.initial_current_level = g.levels[i]
+	g.initial_current_level = g.level_pack.levels[i]
 	g.gs.level = g.initial_current_level
 	g.gs.crab = g.initial_current_level.crab_start_pos
 	g.gs.raccoon_pool = g.initial_current_level.raccoon_start_pool
@@ -762,7 +762,7 @@ gameplay_update :: proc() {
 		crab_tile := tilemap_pos_absolute_tile(g.gs.crab)
 		if tilemap_get_tile_val(&g.gs.level.tilemap, crab_tile.x, crab_tile.y) == .Flag {
 			rl.PauseMusicStream(g.drone_music)
-			if g.gs.current_level_index == num_levels - 1 {
+			if g.gs.current_level_index == len(g.level_pack.levels) - 1 {
 				// Final level — credits popup runs dingdings instead of the win sting.
 				rl.ResumeMusicStream(g.dingdings_music)
 			} else {
@@ -787,141 +787,6 @@ gameplay_update :: proc() {
 }
 
 
-update_dev_console :: proc(screen_width, screen_height : f32) {
-	if g.dev_console.show {
-		text_field_rec := rl.Rectangle {0, screen_height - 30, screen_width, 30}
-		black_a := rl.Color{0,0,0,200}
-		rl.DrawRectangleRec(text_field_rec, black_a)
-		
-		Key_Char :: struct {
-			key : rl.KeyboardKey,
-			char : u8,
-		}
-
-		key_to_char := [?]Key_Char {
-		    {.A, 'a'},
-		    {.B, 'b'},
-		    {.C, 'c'},
-		    {.D, 'd'},
-		    {.E, 'e'},
-		    {.F, 'f'},
-		    {.G, 'g'},
-		    {.H, 'h'},
-		    {.I, 'i'},
-		    {.J, 'j'},
-		    {.K, 'k'},
-		    {.L, 'l'},
-		    {.M, 'm'},
-		    {.N, 'n'},
-		    {.O, 'o'},
-		    {.P, 'p'},
-		    {.Q, 'q'},
-		    {.R, 'r'},
-		    {.S, 's'},
-		    {.T, 't'},
-		    {.U, 'u'},
-		    {.V, 'v'},
-		    {.W, 'w'},
-		    {.X, 'x'},
-		    {.Y, 'y'},
-		    {.Z, 'z'},
-		    {.ZERO,  '0'},
-		    {.ONE,   '1'},
-		    {.TWO,   '2'},
-		    {.THREE, '3'},
-		    {.FOUR,  '4'},
-		    {.FIVE,  '5'},
-		    {.SIX,   '6'},
-		    {.SEVEN, '7'},
-		    {.EIGHT, '8'},
-		    {.NINE,  '9'},
-		    {.SPACE, ' '},
-		}
-
-		get_char :: proc(key_to_char : []Key_Char, key : rl.KeyboardKey) -> (c : u8) {
-			c = 0
-			for kc in key_to_char {
-				if kc.key == key {
-					c = kc.char
-				}
-			}
-			return c
-		} 
-
-		for key in rl.KeyboardKey {
-			pressed := ( rl.IsKeyPressedRepeat(key) || rl.IsKeyPressed(key) ) &&
-				!rl.IsKeyDown(.LEFT_CONTROL) 
-			if pressed {
-				c := get_char(key_to_char[:], key)
-				if c != 0 {
-					append(&g.dev_console.buffer, c)
-				}
-				backspace_pressed := key == rl.KeyboardKey.BACKSPACE
-				can_backspace := len(g.dev_console.buffer) > 0
-				if can_backspace && backspace_pressed {
-					g.dev_console.buffer[len(g.dev_console.buffer) - 1] = 0
-					pop(&g.dev_console.buffer)
-				}
-			}	
-		}
-
-		buffer_cstring : cstring = ""
-		if len(g.dev_console.buffer) > 0 {
-			buffer_cstring = cstring(&g.dev_console.buffer[0])
-		}
-
-
-		rl.DrawText(buffer_cstring, i32(text_field_rec.x), i32(text_field_rec.y), 24, rl.WHITE)
-
-		submit_command := rl.IsKeyPressed(.ENTER)
-		if submit_command {
-			raw_string_text_input := strings.clone_from_bytes(g.dev_console.buffer[:], context.temp_allocator)
-			parts : [dynamic; 100]string
-			// TODO(john) this currently dont work if there are multiple spaces
-			// between command line words
-			
-			for s in strings.split_by_byte_iterator(&raw_string_text_input, ' ') {
-				part := strings.trim_space(s)
-				append(&parts, part)
-			}
-			if len(parts) > 0 {
-				cmd := parts[0]
-				if cmd == "level" {
-					if len(parts) > 1 {
-						sub_cmd := parts[1]
-						if sub_cmd == "swap" {
-							if len(parts) > 2 {
-								arg := parts[2]
-								num, ok := strconv.parse_int(arg, 10)
-								if ok {
-									swap_levels(num, g.gs.current_level_index)
-									change_level_and_initialize(g.gs.current_level_index)
-								}
-							}
-						}
-						else if sub_cmd == "goto" {
-							if len(parts) > 2 {
-								arg := parts[2]
-								num, ok := strconv.parse_int(arg, 10)
-								if ok {
-									change_level_and_initialize(num)
-								}
-							}
-						}
-					}
-				}
-			}
-			g.dev_console.buffer = {}
-			clear(&g.dev_console.buffer)
-		}
-	}
-
-	toggle_dev_console := rl.IsKeyDown(.LEFT_CONTROL) && rl.IsKeyPressed(.T)
-	if toggle_dev_console {
-		g.dev_console.show = !g.dev_console.show
-	}
-	
-}
 
 update :: proc() {
 
@@ -941,7 +806,7 @@ update :: proc() {
 		}
 	}
 
-	// if rl.IsKeyPressed(.F10) do t_save_data()
+	if rl.IsKeyPressed(.F10) do t_save_data()
 
 	
 
@@ -1556,7 +1421,7 @@ update :: proc() {
 
 	if g.gs.game_over {
 		draw_popup("Racoon got ya", "", "Hit A to play again")
-	} else if g.gs.level_complete && g.gs.current_level_index == num_levels - 1 {
+	} else if g.gs.level_complete && g.gs.current_level_index == len(g.level_pack.levels) - 1 {
 		draw_popup(
 			"You Win",
 			"by Johnny Alfonso and Todd Matthews",
@@ -1586,7 +1451,7 @@ update :: proc() {
 			next_i := g.gs.current_level_index
 			if g.gs.level_complete {
 				// Last-level completion loops back to level 0 for the "You Win" restart.
-				next_i = g.gs.current_level_index == num_levels - 1 ? 0 : g.gs.current_level_index + 1
+				next_i = g.gs.current_level_index == len(g.level_pack.levels) - 1 ? 0 : g.gs.current_level_index + 1
 			}
 			change_level_and_initialize(next_i)
 			g.gs.num_keys_crab_has = 0

@@ -31,6 +31,7 @@ Serializer_Version :: enum u32le {
     initial = 0,
     add_crab_start_pos_to_level = 1,
     add_raccoon_pool_to_level,
+    make_level_pack,
     LATEST_PLUS_ONE,
 }
 
@@ -342,6 +343,25 @@ when SERIALIZER_ENABLE_GENERIC {
         return true
     }
 
+    serialize_fixed_size_dynamic_array :: proc(s: ^Serializer, a: ^$T/[dynamic; $N]$E, loc := #caller_location) -> bool {
+        serializer_debug_scope(s, fmt.tprint(typeid_of(T)))
+        num_elems := len(a)
+        serialize(s, &num_elems, loc) or_return
+        
+        for i := 0; i < num_elems; i += 1 {
+            if s.is_writing {
+                serialize(s, &a[i])
+            } else {
+                v := E{}
+                serialize(s, &v, loc) or_return
+                append_fixed_capacity_elem(a, v)                
+            }
+        }
+    
+        
+        return true
+    }
+
 
     serialize_map :: proc(s: ^Serializer, data: ^$T/map[$K]$V, loc := #caller_location) -> bool {
         serializer_debug_scope(s, fmt.tprint(typeid_of(T)))
@@ -401,12 +421,14 @@ when SERIALIZER_ENABLE_GENERIC {
         serialize_slice,
         serialize_string,
         serialize_dynamic_array,
+        serialize_fixed_size_dynamic_array,
         serialize_map,
 
         serialize_tilemap,
         serialize_level,
         serialize_tilemap_pos,
         serialize_raccoon,
+        serialize_level_pack,
     }
 }
 
@@ -482,7 +504,7 @@ serialize_raccoon :: proc(s : ^Serializer, r : ^Raccoon, loc := #caller_location
     return true
 }
 
-serialize_level :: proc(s : ^Serializer, level : ^Level, loc := #caller_location) -> bool {
+serialize_begin :: proc(s : ^Serializer, loc := #caller_location) -> bool {
     if s.is_writing {
         s.version = SERIALIZER_VERSION_LATEST
     }
@@ -493,6 +515,12 @@ serialize_level :: proc(s : ^Serializer, level : ^Level, loc := #caller_location
         fmt.printf("Unsupported version: %d\n", s.version)
         return false
     }
+
+    return true
+}
+
+serialize_level :: proc(s : ^Serializer, level : ^Level, loc := #caller_location) -> bool {
+    serialize_begin(s)
 
     serialize(s, &level.tilemap, loc) or_return
 
@@ -508,26 +536,41 @@ serialize_level :: proc(s : ^Serializer, level : ^Level, loc := #caller_location
 }   
 
 
-// serialize_levels :: proc(s : ^Serializer, levels : ^[]Levels, loc := #caller_location) -> bool {
-//     if s.is_writing {
-//         s.version = SERIALIZER_VERSION_LATEST
-//     }
-
-//     serialize(s, &s.version, loc) or_return
-
-//     if !s.is_writing && s.version > SERIALIZER_VERSION_LATEST {
-//         fmt.printf("Unsupported version: %d\n", s.version);
-//         return false;
-//     }
+serialize_level_pack :: proc(s : ^Serializer, pack : ^Level_Pack, loc := #caller_location) -> bool {
+    if s.is_writing {
+        s.version = SERIALIZER_VERSION_LATEST
+    }
 
 
-//     serialize(s, &tilemap.tiles, loc) or_return
-//     serialize(s, &tilemap.width, loc) or_return
-//     serialize(s, &tilemap.height, loc) or_return
-//     serialize(s, &tilemap.num_chunks_x, loc) or_return
-//     serialize(s, &tilemap.num_chunks_y, loc) or_return
+    if !s.is_writing && s.version > SERIALIZER_VERSION_LATEST {
+        fmt.printf("Unsupported version: %d\n", s.version)
+        return false
+    }
+
+    serialize(s, &s.version, loc) or_return
 
 
-//     return true    
+    /////////////////////////////////////////////////
 
-// }
+    if s.version < Serializer_Version.make_level_pack {
+        s.read_offset -= size_of(s.version)
+        // This was from jam stuff
+        // when we were just saving an array of levels
+        old_level_count :: 10
+        old_level_cap :: 32
+        old_levels_array : [old_level_cap]Level
+        serialize(s, &old_levels_array) or_return
+        for level in old_levels_array[:old_level_count] {
+            append(&pack.levels, level)
+        }
+        return true
+    }
+
+    ////////////////////////////////////////////
+
+    serialize(s, &pack.levels)
+    
+
+    return true
+}
+

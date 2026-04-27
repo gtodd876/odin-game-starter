@@ -72,6 +72,11 @@ Level :: struct {
 }
 
 
+Level_Pack :: struct {
+	levels : [dynamic; level_cap]Level,
+}
+
+
 crab_anim_fps : f32 : 24
 crab_anim_frames :: 12
 
@@ -122,7 +127,6 @@ raccoon_spawn_delay_duration : f32 : 2.0
 raccoon_level_index :: 4
 
 level_cap :: 32 // just add more if there ends up being more
-num_levels :: 10 // just add more if there ends up being more
 
 play_sound_by_name :: proc(name : string) {
 	m_sound := g.sfx_bank[name]
@@ -156,7 +160,7 @@ Game_Memory :: struct {
 	// this level is the one used for setting an initial state
 	// the one in gs above will change when player is playing
 	initial_current_level : Level,
-	levels : [level_cap]Level,
+	level_pack : Level_Pack,
 	run: bool,
 	debug: Debug_State,
 	editor_selected_tile_type : Tile_Type,
@@ -398,8 +402,8 @@ game_init :: proc() {
 
 	t_load_data(context.temp_allocator)
 
-	g.initial_current_level = g.levels[g.gs.current_level_index]
-	g.gs.level = g.levels[g.gs.current_level_index]
+	g.initial_current_level = g.level_pack.levels[g.gs.current_level_index]
+	g.gs.level = g.level_pack.levels[g.gs.current_level_index]
 
 	change_level_and_initialize(0)
 
