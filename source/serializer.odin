@@ -32,6 +32,7 @@ Serializer_Version :: enum u32le {
     add_crab_start_pos_to_level = 1,
     add_raccoon_pool_to_level,
     make_level_pack,
+    add_raccoon_behavior,
     LATEST_PLUS_ONE,
 }
 
@@ -498,6 +499,11 @@ serialize_raccoon :: proc(s : ^Serializer, r : ^Raccoon, loc := #caller_location
     }
 
     serialize(s, &r.active, loc) or_return
+    if s.version >= Serializer_Version.add_raccoon_behavior {
+        serialize(s, &r.behavior, loc) or_return
+    } else {
+        r.behavior = .Blinky
+    }
     serialize(s, &r.pos, loc) or_return
     serialize(s, &r.direction, loc) or_return
 

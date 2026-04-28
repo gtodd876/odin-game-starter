@@ -25,7 +25,7 @@ Tile_Type :: enum i64 {
 	Solid,
 	Key,
 	Lock,
-	Whatever,
+	Patrol,
 	Flag,
 }
 
@@ -69,13 +69,24 @@ tilemap_set_tile :: proc(tilemap : ^Tilemap, x, y : int, val : Tile_Type) {
 	}
 }
 
-tilemap_get_tile_val ::proc(tilemap :^Tilemap, x, y : int) -> Tile_Type {
+
+tilemap_get_tile_val :: proc {
+	tilemap_get_tile_val_ints,
+	tilemap_get_tile_val_tile,
+}
+
+tilemap_get_tile_val_ints ::proc(tilemap :^Tilemap, x, y : int) -> Tile_Type {
 	in_bounds := tilemap_is_coord_in_bounds(tilemap, x, y)
 	val := Tile_Type.Trail
 	if in_bounds {
 		val = tilemap.tiles[(y*tilemap.width)+x]
 	} else {
 	}
+	return val
+}
+
+tilemap_get_tile_val_tile :: proc(tm : ^Tilemap, tile : [2]int) -> Tile_Type {
+	val := tilemap_get_tile_val_ints(tm, tile.x, tile.y)
 	return val
 }
 
@@ -137,11 +148,23 @@ tile_center_world :: proc(t: ^Tilemap, tx, ty: int) -> [2]f32 {
 	}
 }
 
-tilemap_is_walkable :: proc(t: ^Tilemap, tx, ty: int) -> bool {
+tilemap_is_walkable :: proc {
+	tilemap_is_walkable_tile,
+	tilemap_is_walkable_ints,
+}
+
+tilemap_is_walkable_tile :: proc(t : ^Tilemap, tile : [2]int) -> bool {
+	ret := tilemap_is_walkable_ints(t, tile.x, tile.y)
+	return ret
+}
+
+tilemap_is_walkable_ints :: proc(t: ^Tilemap, tx, ty: int) -> bool {
 	if tx < 0 || tx >= t.width || ty < 0 || ty >= t.height do return false
 	return Tile_Type(t.tiles[ty*t.width + tx]) != .Solid &&
 		Tile_Type(t.tiles[ty*t.width + tx]) != .Lock
 }
+
+
 
 
 chunk_world_origin :: proc(t: ^Tilemap, chunk_x, chunk_y: int) -> [2]f32 {

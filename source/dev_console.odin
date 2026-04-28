@@ -139,6 +139,9 @@ update_dev_console :: proc(screen_width, screen_height : f32) {
 								}
 							}
 						}
+						else if sub_cmd == "reset" {
+							change_level_and_initialize(g.gs.current_level_index)
+						}
 					}
 				}
 			}

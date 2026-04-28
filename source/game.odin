@@ -133,8 +133,14 @@ play_sound_by_name :: proc(name : string) {
 	rl.PlaySound(m_sound)
 }
 
+Behavior :: enum {
+	Blinky,
+	Patrol,
+}
+
 Raccoon :: struct {
 	active : bool,
+	behavior : Behavior, 
 	pos : Tilemap_Pos,
 	direction : Direction,
 }

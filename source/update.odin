@@ -13,6 +13,31 @@ import "core:math"
 import "core:math/linalg"
 import "core:strings"
 
+
+get_adjacent_tiles :: proc(tm : ^Tilemap, tmpos : Tilemap_Pos) -> [Direction][2]int {
+	
+	tile := tilemap_pos_absolute_tile(tmpos)
+
+	adjacent_tiles : [Direction][2]int
+	adjacent_tiles[.None] = tile
+
+	adjacent_tiles[.Left] = tile
+	adjacent_tiles[.Left].x -= 1
+
+	adjacent_tiles[.Right] = tile
+	adjacent_tiles[.Right].x += 1
+
+	adjacent_tiles[.Up] = tile
+	adjacent_tiles[.Up].y -= 1
+
+	adjacent_tiles[.Down] = tile
+	adjacent_tiles[.Down].y += 1
+
+
+	return adjacent_tiles
+}
+
+
 blinky_pick_direction2 :: proc(tm : ^Tilemap, entity_tmpos : Tilemap_Pos,
 	curr_dir : Direction, target_tile : [2]int) -> Direction {
 	
@@ -57,7 +82,7 @@ blinky_pick_direction2 :: proc(tm : ^Tilemap, entity_tmpos : Tilemap_Pos,
 
 
 	closest_tile_direction_to_target := Direction.None
-	closest_distance : f32 = 99999
+	closest_distance : f32 = 99999 // just some really high number. The player will never be this far away from a tile.
 
 	// avoids checking opposite direction and .none
 	for distance, dir in adjacent_tile_distances_from_target_tile {
@@ -104,6 +129,77 @@ blinky_pick_direction2 :: proc(tm : ^Tilemap, entity_tmpos : Tilemap_Pos,
 	
 	return next_dir
 }
+
+
+patrol_pick_direction :: proc (tm : ^Tilemap, entity_tmpos : Tilemap_Pos, curr_dir : Direction) -> Direction {
+	next_dir := Direction.None
+
+	current_entity_tile := tilemap_pos_absolute_tile(entity_tmpos)
+
+	adjacent_tiles : [Direction][2]int
+	adjacent_tiles[.None] = current_entity_tile
+
+	adjacent_tiles[.Left] = current_entity_tile
+	adjacent_tiles[.Left].x -= 1
+
+	adjacent_tiles[.Right] = current_entity_tile
+	adjacent_tiles[.Right].x += 1
+
+	adjacent_tiles[.Up] = current_entity_tile
+	adjacent_tiles[.Up].y -= 1
+
+	adjacent_tiles[.Down] = current_entity_tile
+	adjacent_tiles[.Down].y += 1
+
+	opposite_dir := opposite_direction(curr_dir)
+
+	for tile, dir in adjacent_tiles {
+		in_bounds := tilemap_is_coord_in_bounds(tm, tile.x, tile.y)
+		is_none := dir == .None
+		is_opposite_dir := dir == opposite_direction(curr_dir)
+		is_walkable := tilemap_is_walkable(tm, tile.x, tile.y)
+		tile_val := tilemap_get_tile_val(tm, tile.x, tile.y)
+		is_patrol_tile := tile_val == .Patrol
+
+
+		is_valid_dir := in_bounds && 
+			!is_opposite_dir &&
+			!is_none &&
+			is_walkable &&
+			is_patrol_tile
+
+		if is_valid_dir {
+			is_same_direction_you_already_going := dir == curr_dir
+			if is_same_direction_you_already_going {
+				// for right now, just prioritize targeting
+				// the direction you are already moving if
+				// that is a valid tile
+				next_dir = dir
+				break
+			} else {
+				next_dir = dir
+			}
+		}
+	}
+
+	did_not_find_valid_direction := next_dir == .None
+
+	if did_not_find_valid_direction {
+		opposite_direction := opposite_direction(curr_dir)
+		opposite_direction_tile := adjacent_tiles[opposite_direction]
+		can_turn_around := tilemap_is_walkable(tm, opposite_direction_tile.x, opposite_direction_tile.y)
+		if can_turn_around {
+			next_dir = opposite_direction
+		} 
+		else {
+			next_dir = .None
+		}
+	}
+
+	return next_dir
+
+}
+
 
 
 @(export)
@@ -514,38 +610,41 @@ tilemap_bfs_distances :: proc(t: ^Tilemap, sx, sy: int, out: []int) {
 }
 
 // Exclude the reverse of current direction; pick neighbor that minimizes BFS
-// walking distance to the target. If every forward option is blocked, reverse.
-blinky_pick_direction :: proc(t: ^Tilemap, from: Tilemap_Pos, target: [2]int, current: Direction) -> Direction {
-	dists : [max_tiles]int
-	tilemap_bfs_distances(t, target.x, target.y, dists[:])
+// // walking distance to the target. If every forward option is blocked, reverse.
+// blinky_pick_direction :: proc(t: ^Tilemap, from: Tilemap_Pos, target: [2]int, current: Direction) -> Direction {
+// 	dists : [max_tiles]int
+// 	tilemap_bfs_distances(t, target.x, target.y, dists[:])
 
-	reverse := opposite_direction(current)
-	best := Direction.None
-	best_d := max(int)
-	from_tile := tilemap_pos_absolute_tile(from)
+// 	reverse := opposite_direction(current)
+// 	best := Direction.None
+// 	best_d := max(int)
+// 	from_tile := tilemap_pos_absolute_tile(from)
 
-	for dir in blinky_decision_order {
-		if dir == reverse do continue
-		if !crab_can_step(t, from, dir) do continue
+// 	for dir in blinky_decision_order {
+// 		if dir == reverse do continue
+// 		if !crab_can_step(t, from, dir) do continue
 
-		step := direction_vector(dir)
-		nx := from_tile.x + step.x
-		ny := from_tile.y + step.y
-		if !tilemap_is_coord_in_bounds(t, nx, ny) do continue
-		d := dists[ny*t.width + nx]
-		// First walkable forward seeds best so an unreachable target (all max(int))
-		// still picks SOMETHING; subsequent dirs only win on strictly closer.
-		if best == .None || d < best_d {
-			best_d = d
-			best = dir
-		}
-	}
+// 		step := direction_vector(dir)
+// 		nx := from_tile.x + step.x
+// 		ny := from_tile.y + step.y
+// 		if !tilemap_is_coord_in_bounds(t, nx, ny) do continue
+// 		d := dists[ny*t.width + nx]
+// 		// First walkable forward seeds best so an unreachable target (all max(int))
+// 		// still picks SOMETHING; subsequent dirs only win on strictly closer.
+// 		if best == .None || d < best_d {
+// 			best_d = d
+// 			best = dir
+// 		}
+// 	}
 
-	if best == .None && reverse != .None && crab_can_step(t, from, reverse) {
-		best = reverse
-	}
-	return best
-}
+// 	if best == .None && reverse != .None && crab_can_step(t, from, reverse) {
+// 		best = reverse
+// 	}
+// 	return best
+// }
+
+
+
 
 is_between :: proc(val, bound_a, bound_b : f32) -> bool {
 	lo := min(bound_a, bound_b)
@@ -557,6 +656,7 @@ is_between :: proc(val, bound_a, bound_b : f32) -> bool {
 	return ret
 }
 
+
 update_raccoon :: proc(dt, speed_mod : f32) {
 	if g.gs.game_over || g.gs.level_complete do return
 
@@ -565,18 +665,25 @@ update_raccoon :: proc(dt, speed_mod : f32) {
 		return
 	}
 
-	for &raccoon in g.gs.raccoon_pool {
+	for &raccoon, raccoon_index in g.gs.raccoon_pool {
 		if !raccoon.active do continue
 
 		gs := &g.gs
-		t  := &gs.level.tilemap
+		tm  := &gs.level.tilemap
 
 		defer tilemap_pos_normalize_chunk(&raccoon.pos)
 
-		// Bootstrap: on first tick with no direction, pick one immediately.
+
 		if raccoon.direction == .None {
-			target := tilemap_pos_absolute_tile(gs.crab)
-			raccoon.direction = blinky_pick_direction(t, raccoon.pos, target, .None)
+			target := tilemap_pos_absolute_tile(g.gs.crab)
+			switch raccoon.behavior {
+				case .Blinky: {
+					raccoon.direction = blinky_pick_direction2(tm, raccoon.pos, .None, target)
+				}
+				case .Patrol: {
+					raccoon.direction = patrol_pick_direction(tm, raccoon.pos, .None)
+				}
+			}
 			if raccoon.direction == .None do continue
 		}
 
@@ -612,8 +719,43 @@ update_raccoon :: proc(dt, speed_mod : f32) {
 		should_pick_new_direction := did_cross_x || did_cross_y
 		if should_pick_new_direction {
 
-			target := tilemap_pos_absolute_tile(gs.crab)
-			next_dir := blinky_pick_direction2(t, raccoon.pos, raccoon.direction, target)
+			target := tilemap_pos_absolute_tile(g.gs.crab)
+			next_dir := raccoon.direction
+
+			switch raccoon.behavior {
+				case .Blinky: {
+					next_dir = blinky_pick_direction2(tm, raccoon.pos, raccoon.direction, target)
+					adjacent_tiles := get_adjacent_tiles(tm, raccoon.pos)
+					surrounded_by_unwalkable_tiles := !tilemap_is_walkable(tm, adjacent_tiles[.Up]) &&
+						!tilemap_is_walkable(tm, adjacent_tiles[.Down]) &&
+						!tilemap_is_walkable(tm, adjacent_tiles[.Left]) &&
+						!tilemap_is_walkable(tm, adjacent_tiles[.Right])
+					if surrounded_by_unwalkable_tiles {
+						next_dir = .None
+						raccoon.direction = .None
+						// SNAP to Tile center
+						raccoon.pos.rel_pos.x = f32(int(raccoon.pos.rel_pos.x)) + 0.5
+						raccoon.pos.rel_pos.y = f32(int(raccoon.pos.rel_pos.y)) + 0.5
+
+					}
+				}
+				case .Patrol: {
+					next_dir = patrol_pick_direction(tm, raccoon.pos, raccoon.direction)
+					adjacent_tiles := get_adjacent_tiles(tm, raccoon.pos)
+					surrounded_by_unwalkable_tiles := tilemap_get_tile_val(tm, adjacent_tiles[.Up]) != .Patrol &&
+						tilemap_get_tile_val(tm, adjacent_tiles[.Down]) != .Patrol &&
+						tilemap_get_tile_val(tm, adjacent_tiles[.Left]) != .Patrol &&
+						tilemap_get_tile_val(tm, adjacent_tiles[.Right]) != .Patrol
+					if surrounded_by_unwalkable_tiles {
+						next_dir = .None
+						raccoon.direction = .None
+						// SNAP to Tile center
+						raccoon.pos.rel_pos.x = f32(int(raccoon.pos.rel_pos.x)) + 0.5
+						raccoon.pos.rel_pos.y = f32(int(raccoon.pos.rel_pos.y)) + 0.5
+
+					}
+				}
+			}
 
 			overshoot : f32 = 0
 			if did_cross_x {
@@ -634,6 +776,8 @@ update_raccoon :: proc(dt, speed_mod : f32) {
 
 			raccoon.direction = next_dir
 		}
+
+		
 	}
 }
 
@@ -910,19 +1054,22 @@ update :: proc() {
 
 		place_crab_mod_key := rl.KeyboardKey.C
 		place_coon_mod_key := rl.KeyboardKey.V
+		place_patrol_mod_key := rl.KeyboardKey.B
 
-		if !rl.IsKeyDown(place_crab_mod_key) && !rl.IsKeyDown(place_coon_mod_key) {
+		if !rl.IsKeyDown(place_crab_mod_key) && !rl.IsKeyDown(place_coon_mod_key) && !rl.IsKeyDown(place_patrol_mod_key) {
 			if (rl.IsMouseButtonDown(.LEFT)) {
 				tilemap_set_tile(tilemap, tile_x, tile_y, g.editor_selected_tile_type)
 			} else if rl.IsMouseButtonDown(.RIGHT) {
 				tilemap_set_tile(tilemap, tile_x, tile_y, .Trail)
 			}
-		} else if rl.IsKeyDown(place_crab_mod_key) {
+		}
+		else if rl.IsKeyDown(place_crab_mod_key) {
 			// NOTE(john) Only works when zoomed out
 			if (rl.IsMouseButtonPressed(.LEFT)) {
 				g.gs.crab = absolute_tile_to_tilemap_pos(tile_x, tile_y)
 			}
-		} else if rl.IsKeyDown(place_coon_mod_key) {
+		}
+		else if rl.IsKeyDown(place_coon_mod_key) {
 			if (rl.IsMouseButtonPressed(.LEFT)) {
 				// set first active raccoon
 				for &raccoon in g.gs.raccoon_pool {
@@ -930,6 +1077,34 @@ update :: proc() {
 						tilemap_pos_clicked := absolute_tile_to_tilemap_pos(tile_x, tile_y)
 						raccoon.pos = tilemap_pos_clicked
 						raccoon.direction = .None
+						raccoon.behavior = .Blinky
+						raccoon.active = true
+						break
+					}
+				}
+			} else if (rl.IsMouseButtonPressed(.RIGHT)) {
+				// rid any raccoons in tile
+				for &raccoon in g.gs.raccoon_pool {
+					if raccoon.active {
+						tilemap_pos_clicked := absolute_tile_to_tilemap_pos(tile_x, tile_y)
+						tile_clicked := tilemap_pos_absolute_tile(tilemap_pos_clicked)
+						raccoon_tile := tilemap_pos_absolute_tile(raccoon.pos )
+						if tile_clicked == raccoon_tile {
+							raccoon.active = false
+						}
+					}
+				}
+			}
+		}
+		else if rl.IsKeyDown(place_patrol_mod_key) {
+			if (rl.IsMouseButtonPressed(.LEFT)) {
+				// set first active raccoon
+				for &raccoon in g.gs.raccoon_pool {
+					if !raccoon.active {
+						tilemap_pos_clicked := absolute_tile_to_tilemap_pos(tile_x, tile_y)
+						raccoon.pos = tilemap_pos_clicked
+						raccoon.direction = .None
+						raccoon.behavior = .Patrol
 						raccoon.active = true
 						break
 					}
@@ -949,7 +1124,7 @@ update :: proc() {
 			}
 		}
 
-		if !rl.IsKeyDown(place_coon_mod_key) {
+		if !rl.IsKeyDown(place_coon_mod_key) && !rl.IsKeyDown(place_patrol_mod_key) {
 			if (rl.IsMouseButtonDown(.LEFT)) {
 				tilemap_set_tile(tilemap, tile_x, tile_y, g.editor_selected_tile_type)
 			} else if rl.IsMouseButtonDown(.RIGHT) {
@@ -1083,7 +1258,7 @@ update :: proc() {
 						}
 						rl.DrawTextureV(g.flag_texture, wpos, rl.WHITE)
 					}
-					case .Whatever: {
+					case .Patrol: {
 						rect := rl.Rectangle {
 							chunk_pos.x + (tile_size*f32(tile_x)),
 							chunk_pos.y + (tile_size*f32(tile_y)),
